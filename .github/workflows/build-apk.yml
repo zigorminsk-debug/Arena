@@ -135,27 +135,76 @@ jobs:
         env:
           VERSION_NAME: ${{ steps.ver.outputs.name }}
           VERSION_CODE: ${{ steps.ver.outputs.code }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
           set -euo pipefail
           mkdir -p dist
+
+          # debug-APK — всегда устанавливается и обновляется поверх прошлых версий
           cp app/build/outputs/apk/debug/app-debug.apk \
              "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk"
 
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk \
-               "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}.apk"
+          # release-APK попадёт в релиз только если он подписан (иначе — в артефакты)
+          RELEASE_APK=""
+          if [ "${SIGNED}" = "true" ] && [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            RELEASE_APK="dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}.apk"
+            cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
           elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            mkdir -p dist/unsigned
             cp app/build/outputs/apk/release/app-release-unsigned.apk \
-               "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-unsigned.apk"
+               "dist/unsigned/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-unsigned.apk"
           fi
 
-          # Проверяем, что APK действительно рабочий
-          APK="dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk"
-          unzip -l "$APK" | grep -q "classes.dex"
-          unzip -l "$APK" | grep -q "resources.arsc"
-          unzip -l "$APK" | grep -q "lib/" || echo "bundle без нативных библиотек — это нормально"
+          echo "release_apk=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+        id: dist
 
-          ls -lh dist
+      - name: Проверить APK (aapt2 + apksigner)
+        if: steps.build.outputs.status == '0'
+        run: |
+          set +e
+          DEBUG_APK=$(ls dist/*-debug.apk | head -1)
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          AAPT="$BUILD_TOOLS/aapt2"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          [ -x "$AAPT" ] || AAPT=$(command -v aapt2 || true)
+
+          {
+            echo "## Проверка APK"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$AAPT" ] && [ -x "$AAPT" ]; then
+            echo "== aapt2 dump badging ==" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$AAPT" dump badging "$DEBUG_APK" \
+              | grep -E "^(package|sdkVersion|targetSdkVersion|launchable-activity|application-label|uses-permission)" \
+              | head -20 | tee -a "$GITHUB_STEP_SUMMARY"
+
+            echo "== профили в манифесте (android:process) ==" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$AAPT" dump xmltree --file AndroidManifest.xml "$DEBUG_APK" 2>/dev/null \
+              | grep -A1 "android:process" | grep -oE '"[^"]*"' | sort -u | head -10 | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "aapt2 не найден — пропускаю разбор манифеста" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -x "$APKSIGNER" ]; then
+            echo "== подпись ==" | tee -a "$GITHUB_STEP_SUMMARY"
+            "$APKSIGNER" verify --print-certs "$DEBUG_APK" 2>&1 | head -5 | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # ключевые факты — в аннотации, чтобы их было видно без скачивания логов
+          "$AAPT" dump badging "$DEBUG_APK" 2>/dev/null | grep -E "^(package|sdkVersion|targetSdkVersion|application-label)" \
+            | while IFS= read -r line; do echo "::notice::$line"; done
+          "$APKSIGNER" verify "$DEBUG_APK" 2>&1 | head -2 | while IFS= read -r line; do echo "::notice::apksigner: $line"; done
+
+      - name: Итоги сборки
+        if: steps.build.outputs.status == '0'
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: |
+          set -euo pipefail
           {
             echo "### APK готов"
             echo ""
@@ -165,13 +214,14 @@ jobs:
               echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"
             done
           } >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist dist/* 2>/dev/null | head -20
 
       - name: Загрузить APK как артефакт
         if: steps.build.outputs.status == '0'
         uses: actions/upload-artifact@v6
         with:
           name: ArenaMobile-APK-${{ steps.ver.outputs.name }}-build${{ github.run_number }}
-          path: dist/*.apk
+          path: dist/**/*.apk
           if-no-files-found: error
           retention-days: 90
 
