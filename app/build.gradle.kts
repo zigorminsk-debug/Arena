@@ -37,8 +37,6 @@ android {
         targetSdk = 34
         versionCode = ciVersionCode ?: baseVersionCode
         versionName = ciVersionName ?: baseVersionName
-        resourceConfigurations += listOf("en", "ru")
-        vectorDrawables.useSupportLibrary = true
     }
 
     signingConfigs {

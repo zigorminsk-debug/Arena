@@ -35,16 +35,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Версия сборки
         id: ver
@@ -55,8 +55,13 @@ jobs:
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "Версия: $NAME (код ${{ github.run_number }})"
 
-      - name: Иконки из design/ (ImageMagick)
+      - name: Иконки из design/ (ImageMagick, если есть)
         run: |
+          set -euo pipefail
+          if ! command -v convert >/dev/null 2>&1 && ! command -v magick >/dev/null 2>&1; then
+            echo "ImageMagick не установлен — беру иконки, закоммиченные в репозиторий"
+            exit 0
+          fi
           chmod +x scripts/gen_icons.sh
           ./scripts/gen_icons.sh
 
@@ -136,7 +141,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Загрузить APK как артефакт
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ArenaMobile-APK-${{ steps.ver.outputs.name }}-build${{ github.run_number }}
           path: dist/*.apk
@@ -149,7 +154,7 @@ jobs:
           startsWith(github.ref, 'refs/tags/v') ||
           github.ref == 'refs/heads/main' ||
           github.event.inputs.publish_release == 'true' )
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-b{1}', steps.ver.outputs.name, github.run_number) }}
           name: Arena Mobile ${{ steps.ver.outputs.name }} (build ${{ github.run_number }})

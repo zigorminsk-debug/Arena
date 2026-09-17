@@ -15,4 +15,6 @@
 
 # AndroidX / Material
 -dontwarn androidx.**
+-dontwarn org.chromium.**
+-dontwarn javax.annotation.**
 -keep class androidx.appcompat.widget.** { *; }

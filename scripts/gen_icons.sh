@@ -10,8 +10,11 @@ SRC="design/icon_source.png"
 MARK="design/icon_mark.png"
 RES="app/src/main/res"
 
-if ! command -v convert >/dev/null 2>&1; then
-  echo "Нужен ImageMagick (команда convert)" >&2
+# ImageMagick 6 — convert, ImageMagick 7 — magick
+if command -v magick >/dev/null 2>&1; then
+  convert() { magick "$@"; }
+elif ! command -v convert >/dev/null 2>&1; then
+  echo "Нужен ImageMagick (convert или magick)" >&2
   exit 1
 fi
 [ -f "$SRC" ] || { echo "Нет $SRC" >&2; exit 1; }
