@@ -57,8 +57,8 @@ object Sheets {
     fun showEdit(
         activity: AppCompatActivity,
         profileId: String,
-        onSaved: () -> Unit,
         onResetRequest: (() -> Unit)? = null,
+        onSaved: () -> Unit,
     ) {
         val binding = SheetProfileEditBinding.inflate(activity.layoutInflater)
         val dialog = BottomSheetDialog(activity)

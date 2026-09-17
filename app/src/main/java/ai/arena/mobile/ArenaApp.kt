@@ -27,7 +27,10 @@ class ArenaApp : Application() {
         }
     }
 
-    private fun isMainProcess(): Boolean = currentProcessName() == null || currentProcessName() == packageName
+    private fun isMainProcess(): Boolean {
+        val name = currentProcessName(this)
+        return name == null || name == packageName
+    }
 
     companion object {
         fun currentProcessName(context: Context): String? = try {
