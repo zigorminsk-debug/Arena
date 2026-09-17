@@ -217,7 +217,16 @@ for f, text in kotlin_sources.items():
         elif kind not in {"string", "color", "drawable", "layout", "menu", "mipmap", "bool"}:
             warn(f"{rel}: неизвестный тип ресурса R.{kind}.{name}")
 
-    # 3. импорты databinding
+    # 3. core-ktx свойства расширений должны быть импортированы
+    for ext, imp in (
+        ("isVisible", "androidx.core.view.isVisible"),
+        ("isGone", "androidx.core.view.isGone"),
+        ("isInvisible", "androidx.core.view.isInvisible"),
+    ):
+        if re.search(r"\.\s*" + ext + r"\b", text) and f"import {imp}" not in text:
+            err(f"{rel}: используется .{ext}, но нет импорта {imp}")
+
+    # 4. импорты databinding
     for imp in re.findall(r"import\s+ai\.arena\.mobile\.databinding\.(\w+)", text):
         layout = re.sub(r"(?<!^)(?=[A-Z])", "_", imp[: -len("Binding")]).lower()
         if layout not in layout_ids:

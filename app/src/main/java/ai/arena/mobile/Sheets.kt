@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.view.isVisible
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import ai.arena.mobile.databinding.ItemProfileRowBinding
 import ai.arena.mobile.databinding.SheetProfileEditBinding
@@ -21,7 +22,6 @@ object Sheets {
     fun showSwitch(activity: AppCompatActivity, currentId: String) {
         val binding = SheetProfilesBinding.inflate(activity.layoutInflater)
         val dialog = BottomSheetDialog(activity)
-        val density = activity.resources.displayMetrics.density
 
         ProfileStore.all(activity).forEach { profile ->
             val row = ItemProfileRowBinding.inflate(activity.layoutInflater, binding.rows, false)

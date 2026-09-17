@@ -88,26 +88,50 @@ jobs:
           } > keystore.properties
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
+      - name: Статическая проверка проекта
+        run: python3 tools/selfcheck.py
+
       - name: Gradle wrapper
         run: |
           chmod +x ./gradlew
           ./gradlew --version
 
-      - name: Сборка debug (всегда устанавливается)
+      - name: Сборка APK (debug + release)
+        id: build
+        continue-on-error: true
         run: |
-          ./gradlew :app:assembleDebug \
-            -PversionCode=${{ steps.ver.outputs.code }} \
-            -PversionName=${{ steps.ver.outputs.name }} \
-            --stacktrace
+          set +e
+          ./gradlew :app:assembleDebug :app:assembleRelease \
+            -PversionCode="${{ steps.ver.outputs.code }}" \
+            -PversionName="${{ steps.ver.outputs.name }}" \
+            --stacktrace --console=plain --no-daemon 2>&1 | tee gradle-build.log
+          STATUS=${PIPESTATUS[0]}
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Сборка release
+      - name: Диагностика сборки
+        if: steps.build.outputs.status != '0'
         run: |
-          ./gradlew :app:assembleRelease \
-            -PversionCode=${{ steps.ver.outputs.code }} \
-            -PversionName=${{ steps.ver.outputs.name }} \
-            --stacktrace
+          set +e
+          echo "Gradle завершился с кодом: ${{ steps.build.outputs.status }}"
+          grep -E "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not )" gradle-build.log \
+            | head -45 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          {
+            echo "## Ошибки сборки"
+            echo '```'
+            grep -nE "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not )" gradle-build.log | head -80
+            echo '```'
+            echo "### Хвост лога"
+            echo '```'
+            tail -30 gradle-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Собрать артефакты в dist/
+        if: steps.build.outputs.status == '0'
         env:
           VERSION_NAME: ${{ steps.ver.outputs.name }}
           VERSION_CODE: ${{ steps.ver.outputs.code }}
@@ -125,9 +149,11 @@ jobs:
                "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-unsigned.apk"
           fi
 
-          # Проверка, что APK действительно собрался и внутри есть всё нужное
-          unzip -l "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk" | grep -q "classes.dex"
-          unzip -l "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk" | grep -q "resources.arsc"
+          # Проверяем, что APK действительно рабочий
+          APK="dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk"
+          unzip -l "$APK" | grep -q "classes.dex"
+          unzip -l "$APK" | grep -q "resources.arsc"
+          unzip -l "$APK" | grep -q "lib/" || echo "bundle без нативных библиотек — это нормально"
 
           ls -lh dist
           {
@@ -141,6 +167,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Загрузить APK как артефакт
+        if: steps.build.outputs.status == '0'
         uses: actions/upload-artifact@v5
         with:
           name: ArenaMobile-APK-${{ steps.ver.outputs.name }}-build${{ github.run_number }}
@@ -150,7 +177,7 @@ jobs:
 
       - name: Опубликовать Release
         if: >-
-          github.event_name != 'pull_request' && (
+          steps.build.outputs.status == '0' && github.event_name != 'pull_request' && (
           startsWith(github.ref, 'refs/tags/v') ||
           github.ref == 'refs/heads/main' ||
           github.event.inputs.publish_release == 'true' )
@@ -159,14 +186,15 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-b{1}', steps.ver.outputs.name, github.run_number) }}
           name: Arena Mobile ${{ steps.ver.outputs.name }} (build ${{ github.run_number }})
           body: |
-            Автоматически собранный APK для приложения **Arena Mobile**.
+            Автоматически собранный APK приложения **Arena Mobile**.
 
             * версия: `${{ steps.ver.outputs.name }}`
             * номер сборки (versionCode): `${{ github.run_number }}`
             * ветка/коммит: `${{ github.ref_name }}` / `${{ github.sha }}`
-            * подпись: ${{ steps.signing.outputs.signed == 'true' && 'release-ключ' || 'только debug-ключ' }}
+            * подпись release-APK: ${{ steps.signing.outputs.signed == 'true' && 'ключом из секретов' || 'нет (debug подписан отладочным ключом)' }}
 
-            **Как установить:** скачайте `ArenaMobile-*-debug.apk`, откройте файл на телефоне и разрешите установку из этого источника.
+            **Как установить:** скачайте `ArenaMobile-*-debug.apk`, откройте файл на телефоне
+            и разрешите установку из этого источника. Debug-APK обновляется поверх предыдущих версий.
           files: dist/*.apk
           fail_on_unmatched_files: true
           generate_release_notes: false

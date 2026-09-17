@@ -338,8 +338,9 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         ): Boolean {
             fileChooserCallback?.onReceiveValue(null)
             fileChooserCallback = filePathCallback
+            val chooserIntent = fileChooserParams?.createIntent() ?: return false
             return try {
-                fileChooserLauncher.launch(fileChooserParams?.createIntent())
+                fileChooserLauncher.launch(chooserIntent)
                 true
             } catch (t: Throwable) {
                 fileChooserCallback = null
@@ -349,13 +350,19 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     }
 
     private fun extractUris(resultCode: Int, data: Intent?): Array<Uri>? {
-        if (resultCode != RESULT_OK) return null
-        val clip = data?.clipData
-        return when {
-            clip != null -> Array(clip.itemCount) { clip.getItemAt(it).uri }
-            data?.data != null -> arrayOf(data.data!!)
-            else -> null
+        if (resultCode != RESULT_OK || data == null) return null
+
+        val clip = data.clipData
+        if (clip != null) {
+            val uris = ArrayList<Uri>(clip.itemCount)
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index)?.uri?.let { uris.add(it) }
+            }
+            return if (uris.isEmpty()) null else uris.toTypedArray()
         }
+
+        val single = data.data ?: return null
+        return arrayOf(single)
     }
 
     private fun hasPermission(permission: String): Boolean =
