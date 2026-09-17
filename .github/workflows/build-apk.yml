@@ -85,7 +85,7 @@ jobs:
               echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
               echo "storeType=JKS"
             } > keystore.properties
-            echo "источник=секреты" >> "$GITHUB_OUTPUT"
+            echo "source=секреты репозитория" >> "$GITHUB_OUTPUT"
             echo "signed=true" >> "$GITHUB_OUTPUT"
             echo "Использую ключ из секретов репозитория"
             exit 0
@@ -93,7 +93,7 @@ jobs:
 
           # 2. Постоянный ключ в репозитории — им подписаны все опубликованные APK
           if [ -f keystore/keystore.properties ] && [ -f keystore/arena-release.p12 ]; then
-            echo "источник=репозиторий (keystore/arena-release.p12)" >> "$GITHUB_OUTPUT"
+            echo "source=постоянный ключ keystore/arena-release.p12" >> "$GITHUB_OUTPUT"
             echo "signed=true" >> "$GITHUB_OUTPUT"
             echo "Использую постоянный ключ из репозитория"
             exit 0
@@ -140,7 +140,7 @@ jobs:
               echo "::warning::ключ создан вне ветки — закоммитьте keystore/ вручную"
             fi
           fi
-          echo "источник=создан в CI" >> "$GITHUB_OUTPUT"
+          echo "source=ключ, созданный в CI" >> "$GITHUB_OUTPUT"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Статическая проверка проекта
@@ -327,7 +327,7 @@ jobs:
             * версия: `${{ steps.ver.outputs.name }}`
             * номер сборки (versionCode): `${{ github.run_number }}`
             * ветка/коммит: `${{ github.ref_name }}` / `${{ github.sha }}`
-            * подпись: постоянный ключ (`keystore/arena-release.p12`, источник: ${{ steps.signing.outputs.источник || 'секреты' }}) — оба APK
+            * подпись: постоянный ключ (`keystore/arena-release.p12`, источник: ${{ steps.signing.outputs.source }}) — оба APK
               подписаны одинаково, поэтому обновления ставятся поверх без переустановки
 
             | файл | что это |

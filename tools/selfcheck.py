@@ -275,6 +275,35 @@ if MANIFEST.exists():
         if dupes:
             warn(f"манифест: повторяющиеся process: {sorted(dupes)}")
 
+# ------------------------------------------------- workflows GitHub Actions
+
+workflow_dir = ROOT / ".github" / "workflows"
+for workflow in sorted(workflow_dir.glob("*.y*ml")):
+    text = read(workflow)
+    rel = workflow.relative_to(ROOT)
+
+    # GitHub не компилирует workflow, если в выражении ${{ }} есть не-ASCII символы.
+    for expression in re.findall(r"\$\{\{(.+?)\}\}", text, re.S):
+        bad = [ch for ch in expression if ord(ch) > 127]
+        if bad:
+            err(
+                f"{rel}: нелатинские символы в выражении ${{{{{expression.strip()[:50]}}}}}: "
+                f"{''.join(sorted(set(bad)))}"
+            )
+
+    # Имена outputs, выставляемые через $GITHUB_OUTPUT, тоже должны быть ASCII-идентификаторами.
+    for name in re.findall(r'echo\s+"([^"=]+)=', text):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
+            err(f"{rel}: некорректное имя output в GITHUB_OUTPUT: {name!r}")
+
+    # На каждый вызов uses: путь должен быть с версией (@vN или SHA)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("uses:"):
+            value = stripped.split("uses:", 1)[1].split("#")[0].strip()
+            if "@" not in value:
+                err(f"{rel}: у действия {value} не указана версия (@vN)")
+
 # ------------------------------------------------------------ прочие файлы
 
 for required in (
