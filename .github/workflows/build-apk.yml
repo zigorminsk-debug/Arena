@@ -1,0 +1,167 @@
+name: Build APK
+
+# Автосборка APK: на каждый push, на теги v*, по кнопке и на pull request.
+# Артефакт всегда доступен во вкладке Actions; для main и тегов создаётся Release.
+
+on:
+  push:
+    branches:
+      - main
+      - 'arena/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Опубликовать GitHub Release с APK'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Собрать APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Версия сборки
+        id: ver
+        run: |
+          set -euo pipefail
+          NAME=$(grep -E '^versionName=' version.properties | cut -d= -f2)
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "Версия: $NAME (код ${{ github.run_number }})"
+
+      - name: Иконки из design/ (ImageMagick)
+        run: |
+          chmod +x scripts/gen_icons.sh
+          ./scripts/gen_icons.sh
+
+      - name: Подпись релиза (если заданы секреты)
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ]; then
+            echo "Секреты подписи не заданы — релизный APK соберётся неподписанным."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=${KEYSTORE_PASSWORD}"
+            echo "keyAlias=${KEY_ALIAS:-arena}"
+            echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } > keystore.properties
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Gradle wrapper
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --version
+
+      - name: Сборка debug (всегда устанавливается)
+        run: |
+          ./gradlew :app:assembleDebug \
+            -PversionCode=${{ steps.ver.outputs.code }} \
+            -PversionName=${{ steps.ver.outputs.name }} \
+            --stacktrace
+
+      - name: Сборка release
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PversionCode=${{ steps.ver.outputs.code }} \
+            -PversionName=${{ steps.ver.outputs.name }} \
+            --stacktrace
+
+      - name: Собрать артефакты в dist/
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk \
+             "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk"
+
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk \
+               "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}.apk"
+          elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk \
+               "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-unsigned.apk"
+          fi
+
+          # Проверка, что APK действительно собрался и внутри есть всё нужное
+          unzip -l "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk" | grep -q "classes.dex"
+          unzip -l "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk" | grep -q "resources.arsc"
+
+          ls -lh dist
+          {
+            echo "### APK готов"
+            echo ""
+            echo "| файл | размер | sha256 |"
+            echo "|---|---|---|"
+            for f in dist/*.apk; do
+              echo "| \`$(basename "$f")\` | $(du -h "$f" | cut -f1) | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Загрузить APK как артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArenaMobile-APK-${{ steps.ver.outputs.name }}-build${{ github.run_number }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Опубликовать Release
+        if: >-
+          github.event_name != 'pull_request' && (
+          startsWith(github.ref, 'refs/tags/v') ||
+          github.ref == 'refs/heads/main' ||
+          github.event.inputs.publish_release == 'true' )
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-b{1}', steps.ver.outputs.name, github.run_number) }}
+          name: Arena Mobile ${{ steps.ver.outputs.name }} (build ${{ github.run_number }})
+          body: |
+            Автоматически собранный APK для приложения **Arena Mobile**.
+
+            * версия: `${{ steps.ver.outputs.name }}`
+            * номер сборки (versionCode): `${{ github.run_number }}`
+            * ветка/коммит: `${{ github.ref_name }}` / `${{ github.sha }}`
+            * подпись: ${{ steps.signing.outputs.signed == 'true' && 'release-ключ' || 'только debug-ключ' }}
+
+            **Как установить:** скачайте `ArenaMobile-*-debug.apk`, откройте файл на телефоне и разрешите установку из этого источника.
+          files: dist/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: false

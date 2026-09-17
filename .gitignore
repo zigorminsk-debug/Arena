@@ -1,34 +1,25 @@
-# Gradle files
-.gradle/
-build/
-
-# Local configuration file (sdk path, etc)
-local.properties
-
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
+# Android / Gradle
 *.iml
-.idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
-
-# Keystore files
+.gradle/
+/local.properties
+/keystore.properties
 *.jks
 *.keystore
+.cxx/
+captures/
+build/
+/app/build/
+dist/
+release/
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
+# IDE
+.idea/
 *.hprof
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Сам исходник иконки (нужен только для scripts/gen_icons.sh)
+!/design/icon_source.png
+!/design/icon_mark.png

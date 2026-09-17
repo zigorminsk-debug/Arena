@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
+    <application
+        android:name=".ArenaApp"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ArenaMobile"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="arena.ai"
+                    android:scheme="https" />
+                <data
+                    android:host="www.arena.ai"
+                    android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <!-- Профиль 1 -->
+        <activity
+            android:name=".ProfileActivity1"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:process=":p1"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".ShutdownReceiver1"
+            android:exported="false"
+            android:process=":p1">
+            <intent-filter>
+                <action android:name="ai.arena.mobile.action.SHUTDOWN_p1" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Профиль 2 -->
+        <activity
+            android:name=".ProfileActivity2"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:process=":p2"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".ShutdownReceiver2"
+            android:exported="false"
+            android:process=":p2">
+            <intent-filter>
+                <action android:name="ai.arena.mobile.action.SHUTDOWN_p2" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Профиль 3 -->
+        <activity
+            android:name=".ProfileActivity3"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:process=":p3"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".ShutdownReceiver3"
+            android:exported="false"
+            android:process=":p3">
+            <intent-filter>
+                <action android:name="ai.arena.mobile.action.SHUTDOWN_p3" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Профиль 4 -->
+        <activity
+            android:name=".ProfileActivity4"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:process=":p4"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".ShutdownReceiver4"
+            android:exported="false"
+            android:process=":p4">
+            <intent-filter>
+                <action android:name="ai.arena.mobile.action.SHUTDOWN_p4" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Профиль 5 -->
+        <activity
+            android:name=".ProfileActivity5"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:process=":p5"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".ShutdownReceiver5"
+            android:exported="false"
+            android:process=":p5">
+            <intent-filter>
+                <action android:name="ai.arena.mobile.action.SHUTDOWN_p5" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

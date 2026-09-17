@@ -1,2 +1,146 @@
-# Arena
-Арена ИИ
+# Arena Mobile
+
+Android-приложение для удобного использования **[arena.ai](https://arena.ai)** с телефона:
+мгновенное переключение между аккаунтами, подключение GitHub для Agent Mode,
+сборка APK автоматически на GitHub Actions.
+
+> Это неофициальная WebView-оболочка. Данные остаются на устройстве: нет аналитики,
+> рекламы и сторонних SDK.
+
+---
+
+## Скачать APK
+
+1. Откройте вкладку **[Releases](../../releases)** — там лежат готовые APK, собранные автоматически.
+2. Либо возьмите артефакт последнего запуска: **[Actions](../../actions/workflows/build-apk.yml)** →
+   нужный run → раздел **Artifacts** → `ArenaMobile-APK-…`.
+
+Установка: скачайте `ArenaMobile-*-debug.apk` на телефон, откройте файл и разрешите
+установку из этого источника. Debug-APK можно ставить поверх предыдущих версий —
+он подписан отладочным ключом, стабильным между сборками.
+
+## Что умеет
+
+| Возможность | Как это работает |
+|---|---|
+| **5 независимых аккаунтов** | Каждый профиль — отдельный процесс Android (`:p1…:p5`) со своим каталогом данных WebView (`app_webview_p1…p5`). Cookie, localStorage и кэш не пересекаются, поэтому вы одновременно залогинены сразу во все аккаунты. |
+| **Быстрое переключение** | Тап по аватару в шапке → список профилей. Или кнопка «Продолжить» на главном экране (открывает последний использованный профиль). |
+| **Подключение GitHub** | Меню профиля → *Agent Mode / GitHub* (`arena.ai/agent`) → переключатель **GitHub Connector** → OAuth-авторизация. Внутри профиля включены сторонние cookie и файловые загрузки, без которых OAuth не проходит. Логин GitHub автоматически подтягивается в карточку профиля. |
+| **Сторонние cookie и вход через Google** | `setAcceptThirdPartyCookies` + режим совместимости (убирает маркер `wv` из User-Agent) — включается в настройках профиля, если провайдер входа отказывается работать внутри WebView. |
+| **Версия для ПК** | Отдельный переключатель для каждого профиля: сайт отдаёт десктопную вёрстку (удобно для diff-панели Agent Mode). |
+| **Мелкие удобства** | Pull-to-refresh, прогресс загрузки, «поделиться/скопировать ссылку», загрузка файлов через DownloadManager, разрешения камеры/микрофона для голосового ввода, диплинки `https://arena.ai/...`, светлая и тёмная темы, запрет выключения экрана во время генерации. |
+| **Полный выход из аккаунта** | «Выйти и стереть данные профиля» — удаляет cookies, storage и весь каталог данных профиля, не затрагивая остальные профили. |
+
+## Автосборка APK (GitHub Actions)
+
+Workflow [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) запускается:
+
+* на каждый push в `main` и `arena/**`;
+* на pull request в `main`;
+* на push тега `v*`;
+* вручную — **Actions → Build APK → Run workflow** (галочка `publish_release`, если нужен Release).
+
+Что делает: ставит JDK 17, собирает debug- и release-APK, прогоняет базовые проверки
+APK, кладёт файлы в **Artifacts** и (для `main`/тегов/по галочке) публикует **Release**
+с тегом `v<версия>-b<номер сборки>`.
+
+Локальная проверка кода без Android Studio (проверяет ссылки на ресурсы, id и т.д.):
+
+```bash
+python3 tools/selfcheck.py
+```
+
+### Подпись релизных APK (необязательно)
+
+По умолчанию release-APK собирается неподписанным (для установки используйте debug-APK).
+Чтобы получить подписанный релиз, добавьте в **Settings → Secrets and variables → Actions**:
+
+| Секрет | Значение |
+|---|---|
+| `KEYSTORE_BASE64` | `base64 -w0 release.jks` |
+| `KEYSTORE_PASSWORD` | пароль хранилища |
+| `KEY_ALIAS` | алиас ключа |
+| `KEY_PASSWORD` | пароль ключа |
+
+Один и тот же ключ используется и для debug, и для release — тогда APK из разных
+запусков CI обновляют друг друга без переустановки.
+
+## Локальная сборка
+
+```bash
+# Linux/macOS: JDK 17+ и Android SDK (ANDROID_HOME или local.properties → sdk.dir)
+./scripts/build_apk_host.sh            # release APK (сам создаст ключ подписи)
+./scripts/build_apk_host.sh debug      # debug APK
+# результат в dist/
+```
+
+Или обычным Gradle:
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+Иконки пересобираются из `design/icon_source.png` и `design/icon_mark.png`:
+
+```bash
+./scripts/gen_icons.sh     # нужен ImageMagick
+```
+
+## Структура проекта
+
+```
+app/src/main/
+├── AndroidManifest.xml          # 5 Activity-профилей, каждая в своём процессе
+├── java/ai/arena/mobile/
+│   ├── ArenaApp.kt              # тема, отложенные очистки профилей
+│   ├── BaseProfileActivity.kt   # WebView, меню, загрузки, GitHub-проба
+│   ├── Profiles.kt              # ProfileActivity1…5
+│   ├── ProfileStore.kt          # JSON-хранилище профилей + очистка данных
+│   ├── SettingsStore.kt         # настройки приложения
+│   ├── ProfileRouter.kt         # переходы между профилями
+│   ├── MainActivity.kt          # список профилей
+│   ├── ProfileAdapter.kt        # карточки профилей
+│   ├── Sheets.kt                # шторки: профили, настройки профиля, настройки, «о приложении»
+│   ├── WebBridge.kt             # минимальный JS-мост (чтение GitHub-логина)
+│   └── Ui.kt                    # ссылки Arena, User-Agent, утилиты UI
+└── res/                         # layout, menu, drawable, values (en/ru), иконки
+.github/workflows/build-apk.yml  # автосборка APK
+scripts/gen_icons.sh             # генерация иконок
+scripts/build_apk_host.sh        # сборка APK на компьютере
+tools/selfcheck.py               # статическая проверка проекта
+```
+
+## Как это работает внутри
+
+* **Изоляция аккаунтов.** Каждой Activity профиля в манифесте задан `android:process=":pN"`,
+  а перед созданием WebView вызывается `WebView.setDataDirectorySuffix("pN")` — так каждая
+  сессия получает собственные cookie/storage/cache. При выходе из аккаунта отложенная
+  очистка сначала гасит процесс профиля, а затем удаляет его каталог данных.
+* **Приватность.** Никаких сетевых запросов, кроме самих страниц arena.ai и GitHub.
+  Разрешения камеры/микрофона запрашиваются только при вызове внутри сайта.
+* **Ссылки.** `https://arena.ai/...` открываются внутри приложения (диплинк-фильтр),
+  остальные схемы (`intent://`, `mailto:`, магазины приложений) передаются системе.
+
+## Если что-то не работает
+
+| Симптом | Решение |
+|---|---|
+| Вход через Google не открывается | Настройки профиля → включить **«Режим совместимости входа»**, затем перезагрузить страницу. |
+| GitHub Connector не авторизует | Убедитесь, что вы внутри профиля (не в браузере) и что для GitHub разрешён вход в сторонних cookie-контекстах; помогает выход и повторный вход. |
+| Сайт выглядит «мобильно сжато» | Включите **«Версия для ПК»** в настройках профиля. |
+| Нужно освободить место | Настройки → **«Стереть все профили»** (или по одному: меню профиля → стереть данные). |
+
+## English (short)
+
+**Arena Mobile** is an unofficial Android WebView shell for [arena.ai](https://arena.ai) with
+isolated multi-account profiles (one app process + one WebView data directory per profile),
+one-tap account switching, GitHub OAuth support for Agent Mode, desktop mode, downloads,
+camera/mic permissions and deep links. APKs are built automatically by GitHub Actions —
+see [Releases](../../releases). Build locally with `./scripts/build_apk_host.sh`, or check the
+sources statically with `python3 tools/selfcheck.py`. MIT-style use at your own risk; not
+affiliated with Arena.
+
+## Лицензия и оговорка
+
+Код можно свободно использовать и менять. Приложение не связано с Arena.ai; «Arena» —
+товарный знак соответствующего правообладателя. Используйте на свой риск.

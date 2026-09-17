@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arena Mobile</string>
+    <string name="app_tagline">arena.ai на твоём телефоне</string>
+
+    <!-- Главный экран -->
+    <string name="profiles_subtitle">Выберите профиль аккаунта</string>
+    <string name="profile_default_name">Профиль %1$d</string>
+    <string name="profile_account_unknown">Аккаунт не указан</string>
+    <string name="profile_card_open">Войти</string>
+    <string name="profile_card_menu">Меню профиля</string>
+    <string name="fab_continue">Продолжить</string>
+    <string name="hint_isolation_title">Изолированные сессии</string>
+    <string name="hint_isolation_body">Каждый профиль хранит свои cookies, localStorage и кэш (папка app_webview_&lt;id&gt;). Переключение аккаунтов не смешивает логины — вы остаётесь в системе сразу под всеми аккаунтами.</string>
+    <string name="github_hint_title">GitHub в Agent Mode</string>
+    <string name="github_hint_body">Откройте любой профиль → arena.ai/agent → включите GitHub Connector, чтобы авторизовать репозитории, не выходя из приложения.</string>
+
+    <!-- Тулбар и меню -->
+    <string name="menu_profiles">Профили…</string>
+    <string name="menu_refresh">Обновить</string>
+    <string name="menu_arena_home">Главная Arena</string>
+    <string name="menu_agent_github">Agent Mode / GitHub</string>
+    <string name="menu_leaderboard">Рейтинг моделей</string>
+    <string name="menu_desktop">Версия для ПК</string>
+    <string name="menu_share">Поделиться ссылкой</string>
+    <string name="menu_copy_url">Скопировать ссылку</string>
+    <string name="menu_open_browser">Открыть в браузере</string>
+    <string name="menu_profile_settings">Настройки профиля</string>
+    <string name="menu_app_settings">Настройки</string>
+    <string name="menu_about">О приложении</string>
+
+    <!-- Переключение профилей -->
+    <string name="sheet_profiles_title">Переключить профиль</string>
+    <string name="sheet_profiles_hint">Аккаунты живут в отдельных процессах WebView</string>
+    <string name="sheet_manage">Управлять профилями</string>
+
+    <!-- Настройки профиля -->
+    <string name="sheet_edit_title">Настройки профиля</string>
+    <string name="sheet_edit_hint">Папка данных: app_webview_%1$s</string>
+    <string name="field_name">Название профиля</string>
+    <string name="field_account">Аккаунт Arena (email или ник)</string>
+    <string name="field_github">GitHub-логин</string>
+    <string name="label_color">Цвет профиля</string>
+    <string name="switch_desktop">Версия для ПК</string>
+    <string name="switch_desktop_hint">Пригодится для панели diff в Agent Mode</string>
+    <string name="switch_compat">Режим совместимости входа</string>
+    <string name="switch_compat_hint">Включите, если Google-вход не открывается в WebView</string>
+    <string name="switch_keep_on">Не выключать экран</string>
+    <string name="action_save">Сохранить</string>
+    <string name="action_reset_profile">Выйти и стереть данные профиля</string>
+    <string name="dialog_reset_title">Стереть данные профиля?</string>
+    <string name="dialog_reset_message">Cookies, localStorage и кэш этого профиля будут удалены. Остальные профили не затрагиваются.</string>
+    <string name="action_reset">Стереть</string>
+    <string name="action_cancel">Отмена</string>
+
+    <!-- Настройки приложения -->
+    <string name="sheet_settings_title">Настройки</string>
+    <string name="switch_light_theme">Светлая тема</string>
+    <string name="switch_pinch_zoom">Масштаб двумя пальцами</string>
+    <string name="switch_pinch_zoom_hint">Включите, если нужно приближать интерфейс</string>
+    <string name="action_reset_all">Стереть все профили</string>
+    <string name="dialog_reset_all_title">Стереть все профили?</string>
+    <string name="dialog_reset_all_message">Все сессии Arena и подключения GitHub, сохранённые в приложении, будут удалены.</string>
+
+    <!-- О приложении -->
+    <string name="about_title">О приложении</string>
+    <string name="about_message">Arena Mobile — независимая WebView-оболочка для arena.ai: быстрое переключение аккаунтов, подключение GitHub в Agent Mode, обновление свайпом и режим для ПК.\n\nНе является официальным приложением Arena. Данные не покидают устройство — внутри нет аналитики и сторонних SDK.</string>
+    <string name="about_version">Версия %1$s (сборка %2$d)</string>
+    <string name="link_leaderboard">Рейтинг моделей</string>
+    <string name="link_help">Справка Arena</string>
+
+    <!-- Уведомления и состояния -->
+    <string name="toast_saved">Сохранено</string>
+    <string name="toast_reset_done">Данные профиля удалены</string>
+    <string name="toast_url_copied">Ссылка скопирована</string>
+    <string name="toast_download_started">Загрузка началась</string>
+    <string name="toast_download_failed">Не удалось скачать файл</string>
+    <string name="toast_no_app">Нет приложения для этой ссылки</string>
+    <string name="error_title">Не удалось загрузить страницу</string>
+    <string name="error_message_offline">Проверьте интернет-соединение и попробуйте снова.</string>
+    <string name="action_retry">Повторить</string>
+    <string name="github_connected">GitHub: %1$s</string>
+    <string name="github_not_connected">GitHub не подключён</string>
+    <string name="perm_needed">Для этого действия нужно разрешение</string>
+</resources>
