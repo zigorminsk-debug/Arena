@@ -46,28 +46,31 @@ else
 fi
 
 # --- 3. Ключ подписи --------------------------------------------------------
+# Постоянный ключ лежит в keystore/ и используется как есть — так локальные и
+# CI-сборки подписаны одинаково и обновляются поверх друг друга.
 VERSION_NAME=$(grep -E '^versionName=' version.properties | cut -d= -f2)
 VERSION_CODE=$(date +%y%m%d%H%M | cut -c1-9)   # монотонно растущий номер сборки
 
-if [ "$MODE" = "release" ]; then
-  if [ ! -f "$KS_FILE" ]; then
-    command -v keytool >/dev/null 2>&1 || fail "нет keytool (входит в JDK) — не могу создать ключ подписи"
-    info "Создаю ключ подписи $KS_FILE (пароль: arena-mobile)"
-    keytool -genkeypair -v \
-      -keystore "$KS_FILE" \
-      -alias arena \
-      -keyalg RSA -keysize 2048 -validity 10950 \
-      -storepass arena-mobile -keypass arena-mobile \
-      -dname "CN=Arena Mobile, OU=Mobile, O=Arena Mobile, L=, S=, C=RU" >/dev/null
-  fi
+if [ ! -f keystore/keystore.properties ]; then
+  info "Постоянный ключ не найден — создаю keystore/arena-release.p12"
+  command -v openssl >/dev/null 2>&1 || fail "нет openssl — не могу создать ключ подписи"
+  mkdir -p keystore
+  openssl req -x509 -newkey rsa:3072 -sha256 -days 10950 -nodes \
+    -keyout keystore/.key.pem -out keystore/.cert.pem \
+    -subj "/CN=Arena Mobile/O=Arena Mobile/C=BY" \
+    -addext "extendedKeyUsage=codeSigning" >/dev/null 2>&1
+  openssl pkcs12 -export -in keystore/.cert.pem -inkey keystore/.key.pem \
+    -name arena -out keystore/arena-release.p12 -passout pass:arena-mobile
+  rm -f keystore/.key.pem keystore/.cert.pem
   {
-    echo "storeFile=$KS_FILE"
+    echo "storeFile=keystore/arena-release.p12"
     echo "storePassword=arena-mobile"
     echo "keyAlias=arena"
     echo "keyPassword=arena-mobile"
-  } > "$KS_PROPS"
-  info "Подпись: $KS_FILE (alias arena)"
+    echo "storeType=PKCS12"
+  } > keystore/keystore.properties
 fi
+info "Подпись: keystore/arena-release.p12 (alias arena, постоянный ключ)"
 
 # --- 4. Сборка --------------------------------------------------------------
 if [ "$MODE" = "debug" ]; then

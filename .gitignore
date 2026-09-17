@@ -23,3 +23,9 @@ Thumbs.db
 # Сам исходник иконки (нужен только для scripts/gen_icons.sh)
 !/design/icon_source.png
 !/design/icon_mark.png
+
+# Постоянный ключ подписи — он обязан быть в репозитории, иначе обновления
+# APK не будут ставиться поверх установленного приложения.
+!keystore/arena-release.p12
+!keystore/keystore.properties
+!keystore/README.md

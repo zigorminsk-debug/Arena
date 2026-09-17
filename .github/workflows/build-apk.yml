@@ -65,7 +65,7 @@ jobs:
           chmod +x scripts/gen_icons.sh
           ./scripts/gen_icons.sh
 
-      - name: Подпись релиза (если заданы секреты)
+      - name: Ключ подписи
         id: signing
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -74,18 +74,73 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ]; then
-            echo "Секреты подписи не заданы — релизный APK соберётся неподписанным."
-            echo "signed=false" >> "$GITHUB_OUTPUT"
+
+          # 1. Приватный ключ из секретов имеет приоритет
+          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${KEYSTORE_PASSWORD:-}" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            {
+              echo "storeFile=release.jks"
+              echo "storePassword=${KEYSTORE_PASSWORD}"
+              echo "keyAlias=${KEY_ALIAS:-arena}"
+              echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+              echo "storeType=JKS"
+            } > keystore.properties
+            echo "источник=секреты" >> "$GITHUB_OUTPUT"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Использую ключ из секретов репозитория"
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+
+          # 2. Постоянный ключ в репозитории — им подписаны все опубликованные APK
+          if [ -f keystore/keystore.properties ] && [ -f keystore/arena-release.p12 ]; then
+            echo "источник=репозиторий (keystore/arena-release.p12)" >> "$GITHUB_OUTPUT"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Использую постоянный ключ из репозитория"
+            exit 0
+          fi
+
+          # 3. Страховка: ключа нет вовсе — создаём постоянный и коммитим его,
+          #    чтобы этот и все следующие APK были подписаны одинаково
+          echo "Постоянный ключ не найден — создаю новый"
+          mkdir -p keystore
+          keytool -genkeypair -noprompt \
+            -keystore keystore/arena-release.p12 \
+            -storetype PKCS12 -alias arena \
+            -keyalg RSA -keysize 3072 -validity 10950 \
+            -storepass arena-mobile -keypass arena-mobile \
+            -dname "CN=Arena Mobile, O=Arena Mobile, C=BY"
           {
-            echo "storeFile=release.jks"
-            echo "storePassword=${KEYSTORE_PASSWORD}"
-            echo "keyAlias=${KEY_ALIAS:-arena}"
-            echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
-          } > keystore.properties
+            echo "storeFile=keystore/arena-release.p12"
+            echo "storePassword=arena-mobile"
+            echo "keyAlias=arena"
+            echo "keyPassword=arena-mobile"
+            echo "storeType=PKCS12"
+          } > keystore/keystore.properties
+          cat > keystore/README.md <<'EOT'
+          # Постоянный ключ подписи
+
+          `arena-release.p12` — постоянный ключ, которым подписываются debug- и release-APK.
+          Он обязателен для установки обновлений поверх ранее установленного приложения.
+
+          * алиас: `arena`, пароль хранилища и ключа: `arena-mobile`
+          * посмотреть отпечаток: `apksigner verify --print-certs <apk>`
+          EOT
+
+          git config user.name "arena-ci"
+          git config user.email "arena-ci@users.noreply.github.com"
+          git add -f keystore/arena-release.p12 keystore/keystore.properties keystore/README.md
+          if git diff --cached --quiet; then
+            echo "Коммитить нечего"
+          else
+            git commit -m "chore: постоянный ключ подписи APK [skip ci]"
+            if [[ "$GITHUB_REF" == refs/heads/* ]]; then
+              git push origin "HEAD:${GITHUB_REF#refs/heads/}" \
+                || echo "::warning::не удалось запушить ключ подписи — закоммитьте keystore/ вручную"
+            else
+              echo "::warning::ключ создан вне ветки — закоммитьте keystore/ вручную"
+            fi
+          fi
+          echo "источник=создан в CI" >> "$GITHUB_OUTPUT"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Статическая проверка проекта
@@ -140,22 +195,19 @@ jobs:
           set -euo pipefail
           mkdir -p dist
 
-          # debug-APK — всегда устанавливается и обновляется поверх прошлых версий
+          # debug-APK — тоже подписан постоянным ключом, ставится поверх прошлых версий
           cp app/build/outputs/apk/debug/app-debug.apk \
              "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-debug.apk"
 
-          # release-APK попадёт в релиз только если он подписан (иначе — в артефакты)
-          RELEASE_APK=""
-          if [ "${SIGNED}" = "true" ] && [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            RELEASE_APK="dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}.apk"
-            cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
+          # release-APK подписан тем же ключом; если подписи нет, уходит только в артефакты
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk \
+               "dist/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}.apk"
           elif [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
             mkdir -p dist/unsigned
             cp app/build/outputs/apk/release/app-release-unsigned.apk \
                "dist/unsigned/ArenaMobile-${VERSION_NAME}-build${VERSION_CODE}-unsigned.apk"
           fi
-
-          echo "release_apk=$RELEASE_APK" >> "$GITHUB_OUTPUT"
         id: dist
 
       - name: Проверить APK (aapt2 + apksigner)
@@ -204,7 +256,33 @@ jobs:
           echo "::notice::процессы профилей в манифесте: ${PROCESSES:-не найдены}"
 
           SIGN_RESULT=$("$APKSIGNER" verify --verbose "$DEBUG_APK" 2>&1 | grep -E "^(Verifies|Verified using)" | head -3 | tr '\n' '; ')
-          echo "::notice::подпись debug-APK: ${SIGN_RESULT:-нет данных}" 
+          echo "::notice::подпись debug-APK: ${SIGN_RESULT:-нет данных}"
+
+          # Отпечаток сертификата: по нему видно, что все сборки подписаны одним ключом
+          fingerprint() {
+            "$APKSIGNER" verify --print-certs "$1" 2>/dev/null \
+              | grep -m1 "SHA-256 digest" | sed 's/.*digest: *//' | tr 'A-F' 'a-f'
+          }
+
+          DEBUG_FP=$(fingerprint "$DEBUG_APK")
+          echo "::notice::SHA-256 сертификата: ${DEBUG_FP:-неизвестно}"
+
+          RELEASE_APK=$(ls dist/ArenaMobile-*-build*.apk 2>/dev/null | grep -v debug | head -1)
+          if [ -n "$RELEASE_APK" ]; then
+            RELEASE_FP=$(fingerprint "$RELEASE_APK")
+            echo "::notice::release-APK подписан тем же ключом: $([ "$DEBUG_FP" = "$RELEASE_FP" ] && echo да || echo НЕТ)"
+            if [ "$DEBUG_FP" != "$RELEASE_FP" ]; then
+              echo "::error::debug и release подписаны разными ключами — обновления не встанут поверх"
+              exit 1
+            fi
+          fi
+
+          # Стабильность подписи между запусками CI: сравниваем с отпечатком,
+          # который зафиксирован в репозитории
+          EXPECTED_FP=$(grep -oE 'F7:11:DD:93[0-9A-F:]*' keystore/README.md 2>/dev/null | head -1 | tr -d ':' | tr 'A-F' 'a-f')
+          if [ -n "$EXPECTED_FP" ] && [ -n "$DEBUG_FP" ] && [ "$EXPECTED_FP" != "$DEBUG_FP" ]; then
+            echo "::warning::отпечаток ключа (${DEBUG_FP}) отличается от ожидаемого (${EXPECTED_FP}) — проверьте keystore/arena-release.p12"
+          fi
 
       - name: Итоги сборки
         if: steps.build.outputs.status == '0'

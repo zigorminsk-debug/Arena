@@ -5,16 +5,26 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Необязательная подпись релизных сборок: файл keystore.properties (в .gitignore)
-// или переменные окружения ORG_GRADLE_PROJECT_* в CI.
-val keystorePropsFile = rootProject.file("keystore.properties")
-val keystoreProps = Properties().apply {
-    if (keystorePropsFile.exists()) {
-        keystorePropsFile.inputStream().use { load(it) }
-    }
+// ---------------------------------------------------------------------------
+// Подпись APK одним постоянным ключом.
+//
+// Порядок поиска параметров подписи:
+//   1. keystore.properties в корне — его создаёт CI из секретов (приватный ключ);
+//   2. keystore/keystore.properties — постоянный ключ, лежащий в репозитории.
+//
+// Оба типа сборки (debug и release) подписываются одним и тем же ключом, поэтому
+// любой APK из CI ставится поверх ранее установленного без переустановки.
+// ---------------------------------------------------------------------------
+fun loadProperties(file: File): Properties = Properties().apply {
+    if (file.exists()) file.inputStream().use { load(it) }
 }
-val releaseStoreFile = keystoreProps.getProperty("storeFile")?.let { rootProject.file(it) }
-val hasReleaseSigning = releaseStoreFile?.exists() == true
+
+val ciSigningProps = loadProperties(rootProject.file("keystore.properties"))
+val repoSigningProps = loadProperties(rootProject.file("keystore/keystore.properties"))
+val signingProps = if (ciSigningProps.getProperty("storeFile") != null) ciSigningProps else repoSigningProps
+
+val releaseStoreFile = signingProps.getProperty("storeFile")?.let { rootProject.file(it) }
+val hasSigning = releaseStoreFile?.exists() == true
 
 val versionProps = Properties().apply {
     val file = rootProject.file("version.properties")
@@ -40,16 +50,18 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseSigning) {
+        if (hasSigning) {
             create("stable") {
                 storeFile = releaseStoreFile
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
-                // Оба типа сборки подписываются одним ключом, чтобы APK
-                // из разных запусков CI обновляли друг друга без переустановки.
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+                    ?: signingProps.getProperty("storePassword")
+                storeType = signingProps.getProperty("storeType") ?: "PKCS12"
+                // Постоянный ключ => обновления ставятся поверх установленного APK
                 enableV1Signing = true
                 enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -57,7 +69,7 @@ android {
     buildTypes {
         getByName("debug") {
             isMinifyEnabled = false
-            if (hasReleaseSigning) {
+            if (hasSigning) {
                 signingConfig = signingConfigs.getByName("stable")
             }
         }
@@ -68,7 +80,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (hasReleaseSigning) {
+            if (hasSigning) {
                 signingConfig = signingConfigs.getByName("stable")
             }
         }
