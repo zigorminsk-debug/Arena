@@ -327,10 +327,17 @@ jobs:
             * версия: `${{ steps.ver.outputs.name }}`
             * номер сборки (versionCode): `${{ github.run_number }}`
             * ветка/коммит: `${{ github.ref_name }}` / `${{ github.sha }}`
-            * подпись release-APK: ${{ steps.signing.outputs.signed == 'true' && 'ключом из секретов' || 'нет (debug подписан отладочным ключом)' }}
+            * подпись: постоянный ключ (`keystore/arena-release.p12`, источник: ${{ steps.signing.outputs.источник || 'секреты' }}) — оба APK
+              подписаны одинаково, поэтому обновления ставятся поверх без переустановки
 
-            **Как установить:** скачайте `ArenaMobile-*-debug.apk`, откройте файл на телефоне
-            и разрешите установку из этого источника. Debug-APK обновляется поверх предыдущих версий.
+            | файл | что это |
+            |---|---|
+            | `ArenaMobile-${{ steps.ver.outputs.name }}-build${{ github.run_number }}.apk` | release-сборка, сжата R8 — рекомендуемый вариант |
+            | `ArenaMobile-${{ steps.ver.outputs.name }}-build${{ github.run_number }}-debug.apk` | debug-сборка |
+
+            **Как установить:** скачайте APK, откройте файл на телефоне и разрешите установку
+            из этого источника. Новые версии ставятся поверх старых — профили аккаунтов,
+            сессии Arena и подключения GitHub сохраняются.
           files: dist/*.apk
           fail_on_unmatched_files: true
           generate_release_notes: false
