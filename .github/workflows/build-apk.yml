@@ -193,10 +193,18 @@ jobs:
 
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-          # ключевые факты — в аннотации, чтобы их было видно без скачивания логов
-          "$AAPT" dump badging "$DEBUG_APK" 2>/dev/null | grep -E "^(package|sdkVersion|targetSdkVersion|application-label)" \
+          # Ключевые факты — в аннотации (видны без скачивания логов).
+          # Локальные варианты подписи отфильтрованы, иначе аннотаций слишком много.
+          "$AAPT" dump badging "$DEBUG_APK" 2>/dev/null \
+            | grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|launchable-activity)" \
             | while IFS= read -r line; do echo "::notice::$line"; done
-          "$APKSIGNER" verify "$DEBUG_APK" 2>&1 | head -2 | while IFS= read -r line; do echo "::notice::apksigner: $line"; done
+
+          PROCESSES=$("$AAPT" dump xmltree --file AndroidManifest.xml "$DEBUG_APK" 2>/dev/null \
+            | grep -A1 "android:process" | grep -oE '":p[0-9]"' | sort -u | tr -d '"' | tr '\n' ' ')
+          echo "::notice::процессы профилей в манифесте: ${PROCESSES:-не найдены}"
+
+          SIGN_RESULT=$("$APKSIGNER" verify --verbose "$DEBUG_APK" 2>&1 | grep -E "^(Verifies|Verified using)" | head -3 | tr '\n' '; ')
+          echo "::notice::подпись debug-APK: ${SIGN_RESULT:-нет данных}" 
 
       - name: Итоги сборки
         if: steps.build.outputs.status == '0'
