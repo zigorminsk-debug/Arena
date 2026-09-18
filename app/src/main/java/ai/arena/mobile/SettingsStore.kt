@@ -1,11 +1,13 @@
 package ai.arena.mobile
 
 import android.content.Context
+import androidx.appcompat.app.AppCompatDelegate
 import org.json.JSONObject
 import java.io.File
 
 data class AppSettings(
-    val lightTheme: Boolean = false,
+    /** "system" | "light" | "dark" */
+    val themeMode: String = SettingsStore.THEME_SYSTEM,
     val pinchZoom: Boolean = false,
     /**
      * Обновление жестом «потянуть вниз». По умолчанию выключено: на страницах
@@ -14,8 +16,12 @@ data class AppSettings(
     val pullToRefresh: Boolean = false,
 )
 
-/** Настройки всего приложения — тоже в JSON, чтобы их видели все процессы. */
+/** Настройки всего приложения — в JSON, чтобы их видели все процессы. */
 object SettingsStore {
+
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
 
     private fun file(ctx: Context) = File(ctx.filesDir, "settings.json")
 
@@ -26,8 +32,17 @@ object SettingsStore {
             AppSettings()
         } else {
             val json = JSONObject(f.readText())
+            val stored = json.optString("themeMode")
+            val mode = when {
+                stored == THEME_LIGHT || stored == THEME_DARK || stored == THEME_SYSTEM -> stored
+                // обратная совместимость со старой настройкой «светлая тема»
+                json.has("lightTheme") ->
+                    if (json.optBoolean("lightTheme", false)) THEME_LIGHT else THEME_DARK
+
+                else -> THEME_SYSTEM
+            }
             AppSettings(
-                lightTheme = json.optBoolean("lightTheme", false),
+                themeMode = mode,
                 pinchZoom = json.optBoolean("pinchZoom", false),
                 pullToRefresh = json.optBoolean("pullToRefresh", false),
             )
@@ -40,7 +55,7 @@ object SettingsStore {
     fun write(ctx: Context, settings: AppSettings) {
         try {
             val json = JSONObject()
-                .put("lightTheme", settings.lightTheme)
+                .put("themeMode", settings.themeMode)
                 .put("pinchZoom", settings.pinchZoom)
                 .put("pullToRefresh", settings.pullToRefresh)
             val f = file(ctx)
@@ -54,4 +69,17 @@ object SettingsStore {
             // ignore
         }
     }
+
+    /** Применяет выбранную тему ко всему приложению. */
+    fun applyTheme(settings: AppSettings) {
+        AppCompatDelegate.setDefaultNightMode(
+            when (settings.themeMode) {
+                THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+                THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
+                else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            }
+        )
+    }
+
+    fun applyStoredTheme(ctx: Context) = applyTheme(read(ctx))
 }

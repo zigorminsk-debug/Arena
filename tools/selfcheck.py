@@ -87,8 +87,16 @@ resource_names: dict[str, set[str]] = {
 }
 value_dir_re = re.compile(r"^(values|values-[a-z]{2}(-[A-Za-z0-9]+)*)$")
 
-for f in sorted(RES.rglob("*.xml")):
+for f in sorted(RES.rglob("*")):
     parent = f.parent.name
+    if f.is_file() and f.suffix.lower() in {".png", ".webp", ".jpg", ".jpeg"}:
+        # растровые drawable/mipmap: имя ресурса — имя файла без расширения
+        raster_kind = parent.split("-")[0]
+        if raster_kind in resource_names:
+            resource_names[raster_kind].add(f.stem)
+        continue
+    if f.suffix != ".xml":
+        continue
     if value_dir_re.match(parent):
         root = parsed.get(f)
         if root is None:

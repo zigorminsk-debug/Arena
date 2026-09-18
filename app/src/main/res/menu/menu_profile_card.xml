@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/card_open"
+        android:title="@string/profile_card_open" />
+
+    <item
+        android:id="@+id/card_agent"
+        android:title="@string/menu_agent_github" />
+
+    <item
+        android:id="@+id/card_github_repos"
+        android:title="@string/menu_github_repos" />
+
+    <item
+        android:id="@+id/card_settings"
+        android:title="@string/menu_profile_settings" />
+
+    <item
+        android:id="@+id/card_clear_cache"
+        android:title="@string/menu_clear_cache" />
+
+    <item
+        android:id="@+id/card_wipe"
+        android:title="@string/action_reset_profile" />
+</menu>

@@ -38,6 +38,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import ai.arena.mobile.databinding.ActivityProfileBinding
+import org.json.JSONObject
 
 /**
  * Экран профиля: один WebView, один процесс, один каталог данных.
@@ -52,6 +53,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var profile: Profile? = null
     private var lastKnownUrl: String = Links.HOME
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingSharedText: String? = null
     private var pendingPermissionRequest: PermissionRequest? = null
 
     private val fileChooserLauncher =
@@ -82,6 +84,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         setContentView(binding.root)
 
         profile = ProfileStore.get(this, profileId)
+        pendingSharedText = intent?.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
         setupUi()
         setupWebView()
         applyProfileChrome()
@@ -100,7 +103,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         super.onNewIntent(intent)
         setIntent(intent)
         val url = intent.getStringExtra(ProfileRouter.EXTRA_URL)
-        if (!url.isNullOrBlank()) loadUrl(url)
+        pendingSharedText = intent.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
+        if (!url.isNullOrBlank()) loadUrl(url) else if (pendingSharedText != null) webView?.reload()
     }
 
     override fun onResume() {
@@ -295,6 +299,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             updateToolbarSubtitle(current)
             ProfileStore.markUsed(this@BaseProfileActivity, profileId, current)
             injectPageHelpers(view, current)
+            pendingSharedText?.let { injectSharedText(view, it) }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -471,6 +476,39 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         runOnUiThread { binding.swipe.setPageAtTop(atTop) }
     }
 
+    /**
+     * Текст, присланный из другого приложения через «Поделиться»: сначала кладём
+     * в буфер обмена (запасной вариант), затем пытаемся подставить в поле ввода.
+     */
+    private fun injectSharedText(view: WebView, text: String) {
+        pendingSharedText = null
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("prompt", text))
+        } catch (t: Throwable) {
+            // ignore
+        }
+        view.evaluateJavascript(WebBridge.sharedTextScript(JSONObject.quote(text)), null)
+    }
+
+    override fun onSharedTextResult(injected: Boolean) {
+        runOnUiThread {
+            toast(getString(if (injected) R.string.shared_text_pasted else R.string.shared_text_copied))
+        }
+    }
+
+    /** Очистка кэша внутри самого профиля: вход в аккаунт сохраняется. */
+    private fun clearCacheInline() {
+        ProfileStore.markCacheClean(this, profileId)
+        try {
+            webView?.clearCache(true)
+            webView?.clearFormData()
+        } catch (t: Throwable) {
+            // ignore
+        }
+        toast(getString(R.string.toast_cache_cleared))
+    }
+
     override fun onGithubLogin(login: String) {
         runOnUiThread {
             val current = profile ?: return@runOnUiThread
@@ -517,6 +555,16 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
         R.id.action_leaderboard -> {
             loadUrl(Links.LEADERBOARD)
+            true
+        }
+
+        R.id.action_history -> {
+            loadUrl(Links.HISTORY)
+            true
+        }
+
+        R.id.action_github_repos -> {
+            loadUrl(Links.githubRepos(profile?.github.orEmpty()))
             true
         }
 
@@ -587,6 +635,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 applyProfileChrome()
             },
             onResetRequest = { resetProfileInline() },
+            onClearCacheRequest = { clearCacheInline() },
         )
     }
 

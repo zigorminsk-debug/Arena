@@ -8,22 +8,20 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
-import androidx.appcompat.app.AppCompatDelegate
 
 class ArenaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
 
-        val settings = SettingsStore.read(this)
-        AppCompatDelegate.setDefaultNightMode(
-            if (settings.lightTheme) AppCompatDelegate.MODE_NIGHT_NO else AppCompatDelegate.MODE_NIGHT_YES
-        )
+        SettingsStore.applyStoredTheme(this)
 
         // Каталоги WebView удаляются только из главного процесса, когда
         // процессы профилей гарантированно не запущены.
         if (isMainProcess()) {
             ProfileStore.runPendingWipes(this)
+            ProfileStore.runPendingCacheCleans(this)
+            AppShortcuts.syncIfChanged(this)
         }
     }
 
@@ -109,6 +107,41 @@ object ProfileResetter {
 
     fun resetAll(activity: android.app.Activity) {
         ProfileStore.IDS.forEach { reset(activity, it) }
+    }
+
+    /** Очистка кэша профиля без выхода из аккаунта. */
+    fun clearCache(activity: android.app.Activity, profileId: String) {
+        ProfileStore.markCacheClean(activity, profileId)
+        val targetProcess = activity.packageName + ":" + profileId
+        val currentProcess = ArenaApp.currentProcessName(activity)
+
+        if (currentProcess == targetProcess) return // сделает сам профиль, каталог почистим при старте
+        if (isProcessRunning(activity, targetProcess)) {
+            shutdownProcess(activity, profileId)
+            Handler(Looper.getMainLooper()).postDelayed({
+                ProfileStore.wipeProfileCache(activity.applicationContext, profileId)
+            }, 500L)
+        } else {
+            ProfileStore.wipeProfileCache(activity.applicationContext, profileId)
+        }
+    }
+
+    /** Довести до конца очистки кэша, отложенные ранее. */
+    fun finalizePendingCacheCleans(activity: android.app.Activity) {
+        val currentProcess = ArenaApp.currentProcessName(activity)
+        ProfileStore.IDS.forEach { id ->
+            if (!ProfileStore.isCacheCleanMarked(activity, id)) return@forEach
+            val targetProcess = activity.packageName + ":" + id
+            if (currentProcess == targetProcess) return@forEach
+            if (isProcessRunning(activity, targetProcess)) {
+                shutdownProcess(activity, id)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    ProfileStore.wipeProfileCache(activity.applicationContext, id)
+                }, 500L)
+            } else {
+                ProfileStore.wipeProfileCache(activity.applicationContext, id)
+            }
+        }
     }
 
     /** Довести до конца очистки, отложенные ранее (вызывается при возврате к списку профилей). */

@@ -4,8 +4,8 @@ import android.webkit.JavascriptInterface
 
 /**
  * Минимальный мост «страница → приложение». Наружу отдаются только безопасные
- * методы: чтение GitHub-логина (meta[name=user-login]) и положение прокрутки,
- * которое нужно, чтобы pull-to-refresh не отбирал жест у страницы.
+ * методы: чтение GitHub-логина, положение прокрутки и результат подстановки
+ * текста из «Поделиться».
  */
 class WebBridge(private val host: Host) {
 
@@ -14,6 +14,9 @@ class WebBridge(private val host: Host) {
 
         /** true — страница прокручена в самый верх (жест «потянуть вниз» можно перехватывать). */
         fun onPageAtTopChanged(atTop: Boolean)
+
+        /** Результат попытки подставить присланный извне текст в поле ввода. */
+        fun onSharedTextResult(injected: Boolean)
     }
 
     @JavascriptInterface
@@ -27,6 +30,11 @@ class WebBridge(private val host: Host) {
     @JavascriptInterface
     fun reportScroll(atTop: Boolean) {
         host.onPageAtTopChanged(atTop)
+    }
+
+    @JavascriptInterface
+    fun reportSharedText(injected: Boolean) {
+        host.onSharedTextResult(injected)
     }
 
     @JavascriptInterface
@@ -120,5 +128,73 @@ class WebBridge(private val host: Host) {
         val SCROLL_TOP_CALL: String =
             "(function(){try{if(window.__arenaScrollToTop){window.__arenaScrollToTop();}" +
                 "else{window.scrollTo(0,0);}}catch(e){}})();"
+
+        /**
+         * Подставляет текст, присланный через «Поделиться», в поле ввода Arena.
+         * Поле появляется не сразу, поэтому скрипт повторяет попытки и сообщает
+         * результат в приложение: удалось ли вставить текст.
+         *
+         * @param quotedText текст, уже превращённый в JS-литерал (JSONObject.quote).
+         */
+        fun sharedTextScript(quotedText: String): String = """
+            (function (text) {
+              if (!text) { return; }
+              var bridge = window.$JS_NAME;
+              var attempts = 0;
+              var done = false;
+
+              function report(injected) {
+                if (done) { return; }
+                done = true;
+                try { if (bridge) { bridge.reportSharedText(injected); } } catch (e) { }
+              }
+
+              function setNativeValue(el, value) {
+                try {
+                  var isArea = (el.tagName === 'TEXTAREA');
+                  var proto = isArea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                  var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                  if (descriptor && descriptor.set) { descriptor.set.call(el, value); } else { el.value = value; }
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  return el.value === value;
+                } catch (e) {
+                  return false;
+                }
+              }
+
+              function attempt() {
+                attempts++;
+                try {
+                  var field = document.querySelector('textarea:not([readonly]):not([disabled])');
+                  if (field && setNativeValue(field, text)) {
+                    field.focus();
+                    report(true);
+                    return true;
+                  }
+                  var editable = document.querySelector('[contenteditable="true"]');
+                  if (editable) {
+                    editable.focus();
+                    var inserted = false;
+                    try { inserted = document.execCommand('insertText', false, text); } catch (e) { inserted = false; }
+                    if (!inserted) {
+                      editable.textContent = text;
+                      editable.dispatchEvent(new Event('input', { bubbles: true }));
+                      inserted = true;
+                    }
+                    if (inserted) { report(true); return true; }
+                  }
+                } catch (e) { }
+                if (attempts >= 20) { report(false); return true; }
+                return false;
+              }
+
+              if (!attempt()) {
+                var timer = setInterval(function () {
+                  if (attempt()) { clearInterval(timer); }
+                }, 700);
+              }
+            })($quotedText);
+        """.trimIndent()
     }
 }

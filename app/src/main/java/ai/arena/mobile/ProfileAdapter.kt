@@ -9,6 +9,7 @@ import ai.arena.mobile.databinding.ItemProfileBinding
 class ProfileAdapter(
     private val onOpen: (Profile) -> Unit,
     private val onEdit: (Profile) -> Unit,
+    private val onMenu: (Profile, android.view.View) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = mutableListOf<Any>()
@@ -59,7 +60,7 @@ class ProfileAdapter(
             onEdit(profile)
             true
         }
-        binding.btnMore.setOnClickListener { onEdit(profile) }
+        binding.btnMore.setOnClickListener { anchor -> onMenu(profile, anchor) }
     }
 
     class ProfileHolder(val binding: ItemProfileBinding) : RecyclerView.ViewHolder(binding.root)

@@ -9,18 +9,34 @@
         app:showAsAction="ifRoom" />
 
     <item
-        android:id="@+id/action_agent"
-        android:title="@string/menu_agent_github"
-        app:showAsAction="never" />
+        android:title="@string/menu_arena_sections"
+        app:showAsAction="never">
+        <menu>
+            <item
+                android:id="@+id/action_home"
+                android:title="@string/menu_arena_chat"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_agent"
+                android:title="@string/menu_agent_github"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_leaderboard"
+                android:title="@string/menu_leaderboard"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_history"
+                android:title="@string/menu_arena_history"
+                app:showAsAction="never" />
+        </menu>
+    </item>
 
     <item
-        android:id="@+id/action_home"
-        android:title="@string/menu_arena_home"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/action_leaderboard"
-        android:title="@string/menu_leaderboard"
+        android:id="@+id/action_github_repos"
+        android:title="@string/menu_github_repos"
         app:showAsAction="never" />
 
     <item

@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Самообновление: установка скачанного APK поверх текущего -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
@@ -48,6 +50,19 @@
                 <data
                     android:host="www.arena.ai"
                     android:scheme="https" />
+                <data
+                    android:host="lmarena.ai"
+                    android:scheme="https" />
+                <data
+                    android:host="www.lmarena.ai"
+                    android:scheme="https" />
+            </intent-filter>
+
+            <!-- «Поделиться в Arena»: текст из другого приложения → поле ввода чата -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
 

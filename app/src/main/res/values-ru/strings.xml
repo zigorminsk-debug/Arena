@@ -3,6 +3,53 @@
     <string name="app_name">Arena Mobile</string>
     <string name="app_tagline">arena.ai на твоём телефоне</string>
 
+    <!-- Разделы Arena и GitHub -->
+    <string name="menu_arena_sections">Разделы Arena</string>
+    <string name="menu_arena_chat">Чат</string>
+    <string name="menu_arena_history">Поиск по истории</string>
+    <string name="menu_github_repos">Мои репозитории в GitHub</string>
+    <string name="menu_clear_cache">Очистить кэш</string>
+    <string name="dialog_clear_cache_title">Очистить кэш профиля?</string>
+    <string name="dialog_clear_cache_message">Кэш страниц будет удалён, вход в аккаунт сохранится.</string>
+    <string name="toast_cache_cleared">Кэш очищен</string>
+    <string name="sheet_edit_data_size">Данные профиля: %1$s</string>
+
+    <!-- Тема -->
+    <string name="label_theme">Тема оформления</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+
+    <!-- Обновление приложения -->
+    <string name="action_check_update">Проверить обновление</string>
+    <string name="update_available_title">Доступна версия %1$s</string>
+    <string name="update_available_message">Установлено: %1$s (сборка %2$d)\nДоступно: сборка %3$d (%4$s)\n\nОбновление установится поверх текущего приложения — профили, сессии и подключение GitHub сохранятся.</string>
+    <string name="update_download">Скачать и установить</string>
+    <string name="update_open_github">Открыть на GitHub</string>
+    <string name="update_download_started">Загрузка обновления началась — установщик откроется автоматически</string>
+    <string name="update_download_failed">Не удалось скачать обновление</string>
+    <string name="update_check_failed">Не удалось проверить обновления</string>
+    <string name="update_latest">Установлена последняя версия</string>
+
+    <!-- Ярлыки приложения -->
+    <string name="shortcut_continue">Продолжить</string>
+    <string name="shortcut_continue_long">Продолжить в «%1$s»</string>
+    <string name="shortcut_profile_long">Открыть профиль «%1$s»</string>
+
+    <!-- Поделиться в Arena -->
+    <string name="shared_text_pasted">Текст подставлен в поле ввода</string>
+    <string name="shared_text_copied">Текст скопирован — вставьте его в поле ввода</string>
+
+    <!-- Время и размер данных -->
+    <string name="time_now">только что</string>
+    <string name="time_minutes_ago">%1$d мин назад</string>
+    <string name="time_hours_ago">%1$d ч назад</string>
+    <string name="time_yesterday">вчера</string>
+    <string name="size_bytes">%1$d Б</string>
+    <string name="size_kb">%1$.0f КБ</string>
+    <string name="size_mb">%1$.1f МБ</string>
+    <string name="size_gb">%1$.2f ГБ</string>
+
     <!-- Главный экран -->
     <string name="profiles_subtitle">Выберите профиль аккаунта</string>
     <string name="profile_default_name">Профиль %1$d</string>
@@ -56,7 +103,6 @@
 
     <!-- Настройки приложения -->
     <string name="sheet_settings_title">Настройки</string>
-    <string name="switch_light_theme">Светлая тема</string>
     <string name="switch_pinch_zoom">Масштаб двумя пальцами</string>
     <string name="switch_pinch_zoom_hint">Включите, если нужно приближать интерфейс</string>
     <string name="switch_pull_refresh">Обновление свайпом вниз</string>
@@ -67,7 +113,7 @@
 
     <!-- О приложении -->
     <string name="about_title">О приложении</string>
-    <string name="about_message">Arena Mobile — независимая WebView-оболочка для arena.ai: быстрое переключение аккаунтов, подключение GitHub в Agent Mode, обновление свайпом и режим для ПК.\n\nНе является официальным приложением Arena. Данные не покидают устройство — внутри нет аналитики и сторонних SDK.</string>
+    <string name="about_message">Arena Mobile — независимая WebView-оболочка для arena.ai: быстрое переключение аккаунтов, подключение GitHub в Agent Mode и режим для ПК.\n\nПриложение обновляет себя само из GitHub Releases и принимает текст через «Поделиться» из других приложений.\n\nНе является официальным приложением Arena. Данные не покидают устройство — внутри нет аналитики и сторонних SDK.</string>
     <string name="about_version">Версия %1$s (сборка %2$d)</string>
     <string name="link_leaderboard">Рейтинг моделей</string>
     <string name="link_help">Справка Arena</string>

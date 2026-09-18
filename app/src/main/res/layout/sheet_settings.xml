@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/colorSurface"
@@ -16,12 +17,45 @@
         android:layout_height="wrap_content"
         android:text="@string/sheet_settings_title" />
 
-    <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/swLight"
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="@string/switch_light_theme" />
+        android:text="@string/label_theme"
+        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/themeGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnThemeSystem"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/theme_system" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnThemeLight"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/theme_light" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnThemeDark"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/theme_dark" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/swZoom"
@@ -52,6 +86,14 @@
         android:text="@string/switch_pull_refresh_hint"
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="?attr/colorOnSurfaceVariant" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCheckUpdate"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/action_check_update" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnResetAll"

@@ -151,12 +151,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --version
 
-      - name: Сборка APK (debug + release)
+      - name: Юнит-тесты и сборка APK (debug + release)
         id: build
         continue-on-error: true
         run: |
           set +e
-          ./gradlew :app:assembleDebug :app:assembleRelease \
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease \
             -PversionCode="${{ steps.ver.outputs.code }}" \
             -PversionName="${{ steps.ver.outputs.name }}" \
             --stacktrace --console=plain --no-daemon 2>&1 | tee gradle-build.log
@@ -169,14 +169,14 @@ jobs:
         run: |
           set +e
           echo "Gradle завершился с кодом: ${{ steps.build.outputs.status }}"
-          grep -E "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not )" gradle-build.log \
+          grep -E "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not |There were failing tests|.*Test.*FAILED)" gradle-build.log \
             | head -45 | while IFS= read -r line; do
               echo "::error::$line"
             done
           {
             echo "## Ошибки сборки"
             echo '```'
-            grep -nE "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not )" gradle-build.log | head -80
+            grep -nE "^(e: |.*error: |FAILURE: |What went wrong|Execution failed for task|Caused by: |> Task .*FAILED|Could not |There were failing tests|.*Test.*FAILED)" gradle-build.log | head -80
             echo '```'
             echo "### Хвост лога"
             echo '```'

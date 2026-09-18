@@ -9,6 +9,7 @@ object ProfileRouter {
 
     const val EXTRA_PROFILE_ID = "profile_id"
     const val EXTRA_URL = "url"
+    const val EXTRA_SHARED_TEXT = "shared_text"
 
     fun activityClass(id: String): Class<out Activity> = when (id) {
         "p1" -> ProfileActivity1::class.java

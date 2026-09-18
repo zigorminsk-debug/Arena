@@ -151,6 +151,83 @@ object ProfileStore {
         }
     }
 
+    // ---------- размер данных и очистка кэша (вход сохраняется) ----------
+
+    /** Каталоги, где WebView держит данные профиля. */
+    fun profileDirs(ctx: Context, id: String): List<File> {
+        val result = linkedSetOf<File>()
+        val dataDir: File = ctx.dataDir ?: ctx.filesDir.parentFile
+        result.add(File(dataDir, "app_webview_$id"))
+        result.add(File(ctx.cacheDir, "webview_$id"))
+        dataDir.listFiles()?.forEach { child ->
+            if (child.isDirectory && child.name.startsWith("app_webview") &&
+                (child.name.endsWith("_$id") || child.name.endsWith("-$id"))
+            ) {
+                result.add(child)
+            }
+        }
+        return result.toList()
+    }
+
+    fun dataSize(ctx: Context, id: String): Long = profileDirs(ctx, id).sumOf { dirSize(it) }
+
+    private fun dirSize(file: File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        var total = 0L
+        file.listFiles()?.forEach { total += dirSize(it) }
+        return total
+    }
+
+    private val CACHE_PATHS = listOf(
+        "Cache", "Code Cache", "GPUCache", "blob_storage",
+        "Default/Cache", "Default/Code Cache", "Default/GPUCache",
+        "Default/blob_storage", "Default/Service Worker/CacheStorage",
+    )
+
+    fun markCacheClean(ctx: Context, id: String) {
+        try {
+            File(ctx.filesDir, "cache_$id").writeText(System.currentTimeMillis().toString())
+        } catch (t: Throwable) {
+            // ignore
+        }
+    }
+
+    fun isCacheCleanMarked(ctx: Context, id: String): Boolean = try {
+        File(ctx.filesDir, "cache_$id").exists()
+    } catch (t: Throwable) {
+        false
+    }
+
+    private fun clearCacheFlag(ctx: Context, id: String) {
+        try {
+            File(ctx.filesDir, "cache_$id").delete()
+        } catch (t: Throwable) {
+            // ignore
+        }
+    }
+
+    fun runPendingCacheCleans(ctx: Context) {
+        IDS.forEach { id ->
+            if (isCacheCleanMarked(ctx, id)) wipeProfileCache(ctx, id)
+        }
+    }
+
+    /** Удаляет только кэш: cookies, localStorage и входы остаются. */
+    @Synchronized
+    fun wipeProfileCache(ctx: Context, id: String) {
+        try {
+            profileDirs(ctx, id).forEach { dir ->
+                CACHE_PATHS.forEach { relative ->
+                    deleteRecursively(File(dir, relative))
+                }
+            }
+        } catch (t: Throwable) {
+            // ignore
+        }
+        clearCacheFlag(ctx, id)
+    }
+
     private fun deleteRecursively(file: File?) {
         if (file == null || !file.exists()) return
         try {

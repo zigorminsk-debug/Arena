@@ -9,7 +9,12 @@ object Links {
     const val HOME = "https://arena.ai/"
     const val AGENT = "https://arena.ai/agent"
     const val LEADERBOARD = "https://arena.ai/leaderboard/text"
+    const val HISTORY = "https://arena.ai/history/search"
     const val HELP = "https://help.arena.ai/"
+    const val GITHUB = "https://github.com/"
+
+    fun githubRepos(login: String): String =
+        if (login.isBlank()) GITHUB else "https://github.com/$login?tab=repositories"
 }
 
 object WebUtils {
@@ -67,5 +72,7 @@ fun profileSubtitle(context: Context, profile: Profile): String {
     if (profile.github.isNotBlank()) {
         parts.add(context.getString(R.string.github_connected, profile.github))
     }
+    val whenUsed = relativeTime(context, profile.lastUsed)
+    if (whenUsed.isNotBlank()) parts.add(whenUsed)
     return parts.joinToString(" · ")
 }
