@@ -38,6 +38,21 @@
         android:textAppearance="?attr/textAppearanceBodySmall"
         android:textColor="?attr/colorOnSurfaceVariant" />
 
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/swPull"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/switch_pull_refresh" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:text="@string/switch_pull_refresh_hint"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?attr/colorOnSurfaceVariant" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnResetAll"
         style="@style/Widget.Material3.Button.OutlinedButton"

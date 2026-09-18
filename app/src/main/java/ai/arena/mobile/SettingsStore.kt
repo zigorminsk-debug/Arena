@@ -7,6 +7,11 @@ import java.io.File
 data class AppSettings(
     val lightTheme: Boolean = false,
     val pinchZoom: Boolean = false,
+    /**
+     * Обновление жестом «потянуть вниз». По умолчанию выключено: на страницах
+     * с собственной областью прокрутки жест может отбирать касания у страницы.
+     */
+    val pullToRefresh: Boolean = false,
 )
 
 /** Настройки всего приложения — тоже в JSON, чтобы их видели все процессы. */
@@ -24,6 +29,7 @@ object SettingsStore {
             AppSettings(
                 lightTheme = json.optBoolean("lightTheme", false),
                 pinchZoom = json.optBoolean("pinchZoom", false),
+                pullToRefresh = json.optBoolean("pullToRefresh", false),
             )
         }
     } catch (t: Throwable) {
@@ -36,6 +42,7 @@ object SettingsStore {
             val json = JSONObject()
                 .put("lightTheme", settings.lightTheme)
                 .put("pinchZoom", settings.pinchZoom)
+                .put("pullToRefresh", settings.pullToRefresh)
             val f = file(ctx)
             val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(json.toString())

@@ -24,6 +24,11 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_scroll_top"
+        android:title="@string/menu_scroll_top"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_desktop"
         android:checkable="true"
         android:title="@string/menu_desktop"
@@ -52,5 +57,10 @@
     <item
         android:id="@+id/action_switch"
         android:title="@string/menu_profiles"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_app_settings"
+        android:title="@string/menu_app_settings"
         app:showAsAction="never" />
 </menu>

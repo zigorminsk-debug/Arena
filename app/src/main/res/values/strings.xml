@@ -22,6 +22,7 @@
     <string name="menu_agent_github">Agent Mode / GitHub</string>
     <string name="menu_leaderboard">Leaderboard</string>
     <string name="menu_desktop">Desktop version</string>
+    <string name="menu_scroll_top">Scroll to top</string>
     <string name="menu_share">Share link</string>
     <string name="menu_copy_url">Copy link</string>
     <string name="menu_open_browser">Open in browser</string>
@@ -58,6 +59,8 @@
     <string name="switch_light_theme">Light theme</string>
     <string name="switch_pinch_zoom">Pinch to zoom</string>
     <string name="switch_pinch_zoom_hint">Enable if you need to zoom the interface</string>
+    <string name="switch_pull_refresh">Pull to refresh</string>
+    <string name="switch_pull_refresh_hint">Off by default: on pages that use their own scroll container the gesture steals touches from the page. Use the ↻ button in the toolbar to reload.</string>
     <string name="action_reset_all">Wipe all profiles</string>
     <string name="dialog_reset_all_title">Wipe every profile?</string>
     <string name="dialog_reset_all_message">All Arena sessions and GitHub connections stored in the app will be removed.</string>

@@ -1,17 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+    android:background="?android:attr/colorBackground"
+    android:orientation="vertical">
 
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appBar"
+    <!-- Шапка. Обычный LinearLayout: никаких CoordinatorLayout-перехватов касаний,
+         чтобы прокрутка страницы отдавалась WebView целиком. -->
+    <LinearLayout
+        android:id="@+id/header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"
-        app:elevation="0dp">
+        android:elevation="3dp"
+        android:orientation="vertical">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
@@ -41,13 +45,13 @@
             app:indicatorColor="@color/arena_secondary"
             app:trackColor="@color/arena_surface_variant"
             app:trackThickness="3dp" />
-    </com.google.android.material.appbar.AppBarLayout>
+    </LinearLayout>
 
-    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+    <ai.arena.mobile.ArenaSwipeRefreshLayout
         android:id="@+id/swipe"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <FrameLayout
             android:id="@+id/webContainer"
@@ -58,7 +62,8 @@
                 android:id="@+id/webView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="@color/arena_webview_bg" />
+                android:background="@color/arena_webview_bg"
+                android:scrollbarStyle="insideOverlay" />
 
             <LinearLayout
                 android:id="@+id/errorView"
@@ -102,5 +107,5 @@
                     android:text="@string/action_retry" />
             </LinearLayout>
         </FrameLayout>
-    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+    </ai.arena.mobile.ArenaSwipeRefreshLayout>
+</LinearLayout>

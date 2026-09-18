@@ -111,6 +111,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         val userAgentChanged = previous != null &&
             (previous.desktopMode != fresh.desktopMode || previous.googleCompat != fresh.googleCompat)
         applyProfileChrome()
+        applyRuntimeSettings()
         if (userAgentChanged) {
             webView?.settings?.userAgentString = WebUtils.userAgent(WebSettings.getDefaultUserAgent(this), fresh)
             webView?.reload()
@@ -137,6 +138,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         binding.toolbar.setNavigationOnClickListener { goBackSmart() }
         binding.tvAvatar.setOnClickListener { showSwitchSheet() }
         binding.btnRetry.setOnClickListener { loadUrl(lastKnownUrl) }
+        binding.swipe.bindWebView { webView }
         binding.swipe.setOnRefreshListener { webView?.reload() }
         binding.swipe.setColorSchemeColors(ContextCompat.getColor(this, R.color.arena_secondary))
         binding.swipe.setProgressBackgroundColorSchemeColor(ContextCompat.getColor(this, R.color.arena_surface))
@@ -169,6 +171,18 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+    }
+
+    /** Настройки, влияющие на работу уже открытой страницы. */
+    private fun applyRuntimeSettings() {
+        val settings = SettingsStore.read(this)
+        binding.swipe.isEnabled = settings.pullToRefresh
+        if (!settings.pullToRefresh) {
+            binding.swipe.isRefreshing = false
+            binding.swipe.resetScrollState()
+        }
+        webView?.settings?.builtInZoomControls = settings.pinchZoom
+        webView?.settings?.displayZoomControls = false
     }
 
     private fun updateToolbarSubtitle(url: String?) {
@@ -207,7 +221,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         settings.useWideViewPort = true
         settings.mediaPlaybackRequiresUserGesture = false
         settings.setSupportZoom(true)
-        settings.builtInZoomControls = SettingsStore.read(this).pinchZoom
+        settings.builtInZoomControls = false
         settings.displayZoomControls = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) settings.safeBrowsingEnabled = true
         if (Build.VERSION.SDK_INT >= 33) settings.setAlgorithmicDarkeningAllowed(true)
@@ -225,6 +239,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         view.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             startDownload(url, userAgent, contentDisposition, mimeType)
         }
+        // Касания принадлежат WebView: без этого прокрутка на части устройств «залипает»
+        view.isFocusable = true
+        view.isFocusableInTouchMode = true
+        applyRuntimeSettings()
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     }
 
@@ -264,6 +282,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             if (!url.isNullOrBlank()) lastKnownUrl = url
             binding.progress.isVisible = true
             binding.errorView.isVisible = false
+            // До подтверждения из JS жест «потянуть вниз» не перехватываем
+            binding.swipe.resetScrollState()
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
@@ -274,7 +294,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             lastKnownUrl = current
             updateToolbarSubtitle(current)
             ProfileStore.markUsed(this@BaseProfileActivity, profileId, current)
-            injectGithubProbe(view, current)
+            injectPageHelpers(view, current)
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -433,7 +453,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     // --------------------------------------------------------------- GitHub
 
-    private fun injectGithubProbe(view: WebView, url: String) {
+    /** Навешивает на страницу вспомогательные скрипты: состояние прокрутки и логин GitHub. */
+    private fun injectPageHelpers(view: WebView, url: String) {
+        view.evaluateJavascript(WebBridge.SCROLL_SCRIPT, null)
+
         val host = try {
             Uri.parse(url).host
         } catch (t: Throwable) {
@@ -441,6 +464,11 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         } ?: return
         if (!host.endsWith("github.com")) return
         view.evaluateJavascript(WebBridge.PROBE_SCRIPT, null)
+    }
+
+    /** Страница сообщила, что находится в самом верху (или наоборот). */
+    override fun onPageAtTopChanged(atTop: Boolean) {
+        runOnUiThread { binding.swipe.setPageAtTop(atTop) }
     }
 
     override fun onGithubLogin(login: String) {
@@ -489,6 +517,16 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
         R.id.action_leaderboard -> {
             loadUrl(Links.LEADERBOARD)
+            true
+        }
+
+        R.id.action_scroll_top -> {
+            scrollToTop()
+            true
+        }
+
+        R.id.action_app_settings -> {
+            Sheets.showSettings(this) { applyRuntimeSettings() }
             true
         }
 
@@ -578,6 +616,13 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             applyProfileChrome()
         }
         toast(getString(R.string.toast_reset_done))
+    }
+
+    /** Возврат страницы наверх: работает и для внутренних областей прокрутки. */
+    private fun scrollToTop() {
+        val view = webView ?: return
+        view.scrollTo(0, 0)
+        view.evaluateJavascript(WebBridge.SCROLL_TOP_CALL, null)
     }
 
     private fun currentUrl(): String = webView?.url ?: lastKnownUrl

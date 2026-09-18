@@ -22,6 +22,7 @@
     <string name="menu_agent_github">Agent Mode / GitHub</string>
     <string name="menu_leaderboard">Рейтинг моделей</string>
     <string name="menu_desktop">Версия для ПК</string>
+    <string name="menu_scroll_top">Наверх страницы</string>
     <string name="menu_share">Поделиться ссылкой</string>
     <string name="menu_copy_url">Скопировать ссылку</string>
     <string name="menu_open_browser">Открыть в браузере</string>
@@ -58,6 +59,8 @@
     <string name="switch_light_theme">Светлая тема</string>
     <string name="switch_pinch_zoom">Масштаб двумя пальцами</string>
     <string name="switch_pinch_zoom_hint">Включите, если нужно приближать интерфейс</string>
+    <string name="switch_pull_refresh">Обновление свайпом вниз</string>
+    <string name="switch_pull_refresh_hint">Выключено по умолчанию: на страницах с собственной областью прокрутки жест забирает касания у страницы. Обновить можно кнопкой ↻ в шапке.</string>
     <string name="action_reset_all">Стереть все профили</string>
     <string name="dialog_reset_all_title">Стереть все профили?</string>
     <string name="dialog_reset_all_message">Все сессии Arena и подключения GitHub, сохранённые в приложении, будут удалены.</string>

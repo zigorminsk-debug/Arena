@@ -149,6 +149,7 @@ object Sheets {
         val settings = SettingsStore.read(activity)
         binding.swLight.isChecked = settings.lightTheme
         binding.swZoom.isChecked = settings.pinchZoom
+        binding.swPull.isChecked = settings.pullToRefresh
         binding.tvVersion.text = activity.getString(
             R.string.about_version,
             BuildConfig.VERSION_NAME,
@@ -165,6 +166,11 @@ object Sheets {
 
         binding.swZoom.setOnCheckedChangeListener { _, checked ->
             SettingsStore.write(activity, SettingsStore.read(activity).copy(pinchZoom = checked))
+            onChange()
+        }
+
+        binding.swPull.setOnCheckedChangeListener { _, checked ->
+            SettingsStore.write(activity, SettingsStore.read(activity).copy(pullToRefresh = checked))
             onChange()
         }
 
