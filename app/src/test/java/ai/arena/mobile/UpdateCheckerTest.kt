@@ -1,6 +1,7 @@
 package ai.arena.mobile
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -94,5 +95,15 @@ class UpdateCheckerTest {
                 """{"assets": [{"name": "readme.txt", "browser_download_url": "x"}]}"""
             )
         )
+    }
+
+    @Test
+    fun `репозиторий для самообновления задан в сборке`() {
+        // Значение приходит из gradle: CI подставляет GITHUB_REPOSITORY через -Prepo.
+        // Так APK, собранный в форке или в другом репозитории, обновляется из себя,
+        // а не из исходного репозитория проекта.
+        val repo = BuildConfig.GITHUB_REPO
+
+        assertTrue("репозиторий должен быть в формате owner/name: $repo", repo.matches(Regex("[^/]+/[^/]+")))
     }
 }

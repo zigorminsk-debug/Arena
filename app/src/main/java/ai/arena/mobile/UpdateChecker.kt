@@ -31,9 +31,13 @@ data class ReleaseInfo(
  */
 object UpdateChecker {
 
-    private const val REPO = "zigorminsk-debug/Arena"
-    private const val API_URL = "https://api.github.com/repos/$REPO/releases/latest"
-    private const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
+    /**
+     * Репозиторий, откуда приходит обновление. Подставляется на сборке
+     * (CI передаёт GITHUB_REPOSITORY), поэтому APK из форка обновляется из форка.
+     */
+    private val REPO: String get() = BuildConfig.GITHUB_REPO
+    private val API_URL: String get() = "https://api.github.com/repos/$REPO/releases/latest"
+    private val RELEASES_PAGE: String get() = "https://github.com/$REPO/releases/latest"
     private const val APK_MIME = "application/vnd.android.package-archive"
 
     private const val PREFS = "update_prefs"

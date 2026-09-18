@@ -323,6 +323,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease \
             -PversionCode="${{ steps.ver.outputs.code }}" \
             -PversionName="${{ steps.ver.outputs.name }}" \
+            -Prepo="${GITHUB_REPOSITORY}" \
             --stacktrace --console=plain --no-daemon 2>&1 | tee gradle-build.log
           STATUS=${PIPESTATUS[0]}
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"

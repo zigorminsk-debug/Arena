@@ -37,6 +37,14 @@ val baseVersionName = versionProps.getProperty("versionName") ?: "1.0.0"
 val ciVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull()
 val ciVersionName = project.findProperty("versionName") as String?
 
+// Репозиторий для самообновления приложения. CI подставляет сюда GITHUB_REPOSITORY,
+// поэтому APK, собранный в форке или в другом репозитории, будет обновляться из себя,
+// а не из исходного. Значение по умолчанию — текущий репозиторий проекта.
+val githubRepo = (project.findProperty("repo") as String?)
+    ?.takeIf { it.isNotBlank() }
+    ?: System.getenv("GITHUB_REPOSITORY")?.takeIf { it.isNotBlank() }
+    ?: "zigorminsk-debug/Arena"
+
 android {
     namespace = "ai.arena.mobile"
     compileSdk = 34
@@ -47,6 +55,7 @@ android {
         targetSdk = 34
         versionCode = ciVersionCode ?: baseVersionCode
         versionName = ciVersionName ?: baseVersionName
+        buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
     }
 
     signingConfigs {
