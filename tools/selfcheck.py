@@ -377,6 +377,35 @@ if manifest_tree is not None:
     if activities:
         print(f"Поворот экрана: configChanges проверен у {len(activities)} экранов.")
 
+# ------------------------------------------------ постоянный ключ подписи
+
+# Ключ обязан лежать в репозитории: с другим ключом Android не поставит обновление
+# поверх установленного приложения.
+KEYSTORE_FILES = (
+    ROOT / "keystore" / "arena-release.p12",
+    ROOT / "keystore" / "keystore.properties",
+)
+for key_file in KEYSTORE_FILES:
+    if not key_file.exists():
+        err(
+            f"нет {key_file.relative_to(ROOT)} — без постоянного ключа обновления "
+            f"перестанут ставиться поверх; восстановите его из тега signing-key-v1 "
+            f"(см. keystore/KEY-RESTORE.md)"
+        )
+
+workflow_path = ROOT / ".github" / "workflows" / "build-apk.yml"
+if workflow_path.exists():
+    workflow_text = read(workflow_path)
+    # Защита от «тихой» потери подписи: workflow обязан уметь восстановить ключ
+    # из метки и падать, а не создавать другой ключ.
+    for needle, explanation in (
+        ("signing-key-v1", "восстановление ключа из метки signing-key-v1"),
+        ("EXPECTED_FINGERPRINT", "сверка отпечатка постоянного ключа"),
+        ("rotate_key", "создание нового ключа только по явному запросу"),
+    ):
+        if needle not in workflow_text:
+            err(f"build-apk.yml: пропала защита подписи — {explanation} ({needle})")
+
 # ------------------------------------------------------------ прочие файлы
 
 for required in (
