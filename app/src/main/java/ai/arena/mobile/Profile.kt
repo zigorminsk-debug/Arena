@@ -1,5 +1,6 @@
 package ai.arena.mobile
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -16,6 +17,8 @@ data class Profile(
     var desktopMode: Boolean = false,
     var googleCompat: Boolean = false,
     var keepScreenOn: Boolean = false,
+    /** Какие разделы Arena показывать в меню профиля. */
+    var sections: List<String> = ProfileSections.DEFAULT,
     var lastUrl: String = "",
     var lastUsed: Long = 0L,
     var createdAt: Long = 0L,
@@ -31,6 +34,7 @@ data class Profile(
         put("desktopMode", desktopMode)
         put("googleCompat", googleCompat)
         put("keepScreenOn", keepScreenOn)
+        put("sections", JSONArray(sections))
         put("lastUrl", lastUrl)
         put("lastUsed", lastUsed)
         put("createdAt", createdAt)
@@ -46,6 +50,13 @@ data class Profile(
             desktopMode = o.optBoolean("desktopMode", false),
             googleCompat = o.optBoolean("googleCompat", false),
             keepScreenOn = o.optBoolean("keepScreenOn", false),
+            sections = ProfileSections.normalize(
+                o.optJSONArray("sections")?.let { array ->
+                    (0 until array.length()).mapNotNull { index ->
+                        array.optString(index).takeIf { it.isNotEmpty() }
+                    }
+                } ?: ProfileSections.DEFAULT
+            ),
             lastUrl = o.optString("lastUrl", ""),
             lastUsed = o.optLong("lastUsed", 0L),
             createdAt = o.optLong("createdAt", 0L),

@@ -124,6 +124,8 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.webkit:webkit:1.11.0")
+    // Блокировка входа: биометрия или код блокировки устройства
+    implementation("androidx.biometric:biometric:1.1.0")
 
     // Org.json на JVM: в юнит-тестах android.jar отдаёт только заглушки
     testImplementation("junit:junit:4.13.2")

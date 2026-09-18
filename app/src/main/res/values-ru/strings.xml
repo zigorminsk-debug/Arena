@@ -3,6 +3,54 @@
     <string name="app_name">Arena Mobile</string>
     <string name="app_tagline">arena.ai на твоём телефоне</string>
 
+    <!-- Диагностика подключения -->
+    <string name="diag_title">Диагностика подключения</string>
+    <string name="diag_checking">Проверяю сеть, cookies и настройки…</string>
+    <string name="diag_copy_report">Скопировать отчёт</string>
+    <string name="diag_persist_session">Продлить сессию сейчас</string>
+    <string name="diag_recheck">Проверить снова</string>
+    <string name="diag_ok">Подключение в порядке</string>
+    <string name="diag_session_lost">Вход не пережил перезапуск</string>
+    <string name="diag_no_auth_cookie">Нужно войти в аккаунт</string>
+    <string name="diag_in_profile_only">Подробности — внутри профиля</string>
+    <string name="diag_copied">Отчёт скопирован</string>
+    <string name="diag_persisted">Продлено cookies: %1$d</string>
+    <string name="diag_nothing_to_persist">Cookies авторизации не найдены — сначала войдите</string>
+
+    <!-- Блокировка приложения -->
+    <string name="lock_title">Вход в Arena Mobile</string>
+    <string name="lock_subtitle">Подтвердите личность, чтобы открыть приложение</string>
+    <string name="lock_not_available">На устройстве нет биометрии или кода блокировки — защита недоступна</string>
+    <string name="menu_lock_now">Заблокировать сейчас</string>
+    <string name="switch_app_lock">Блокировка входа</string>
+    <string name="switch_app_lock_hint">Просить биометрию или код устройства при открытии приложения; после 5 минут в фоне — снова</string>
+
+    <!-- Резервная копия -->
+    <string name="action_export_profiles">Экспорт профилей в файл</string>
+    <string name="action_import_profiles">Импорт профилей из файла</string>
+    <string name="backup_exported">Файл резервной копии сохранён</string>
+    <string name="backup_imported">Восстановлено профилей: %1$d</string>
+    <string name="backup_error_format">Это не файл резервной копии Arena Mobile</string>
+    <string name="backup_error_io">Не удалось прочитать или записать файл</string>
+
+    <string name="section_required">Этот раздел отключить нельзя</string>
+    <string name="action_save">Сохранить</string>
+    <!-- Разделы профиля -->
+    <string name="action_choose_sections">Разделы Arena в меню</string>
+    <string name="dialog_sections_title">Какие разделы показывать</string>
+
+    <!-- Сессия и запуск -->
+    <string name="switch_keep_session">Продлевать сессию</string>
+    <string name="switch_keep_session_hint">WebView не сохраняет cookies сессии сам: включите, чтобы вход в Arena переживал перезапуск приложения</string>
+    <string name="switch_open_last">Открывать сразу последний профиль</string>
+    <string name="session_lost_hint">Вход не восстановился. Меню → «Диагностика подключения» покажет причину</string>
+
+    <!-- Ярлыки -->
+    <string name="shortcut_new_chat">Новый чат</string>
+    <string name="shortcut_new_chat_long">Новый чат в «%1$s»</string>
+    <string name="shortcut_agent">Agent Mode</string>
+    <string name="shortcut_agent_long">Agent Mode в «%1$s»</string>
+
     <!-- Разделы Arena и GitHub -->
     <string name="menu_arena_sections">Разделы Arena</string>
     <string name="menu_arena_chat">Чат</string>
@@ -94,7 +142,6 @@
     <string name="switch_compat">Режим совместимости входа</string>
     <string name="switch_compat_hint">Включите, если Google-вход не открывается в WebView</string>
     <string name="switch_keep_on">Не выключать экран</string>
-    <string name="action_save">Сохранить</string>
     <string name="action_reset_profile">Выйти и стереть данные профиля</string>
     <string name="dialog_reset_title">Стереть данные профиля?</string>
     <string name="dialog_reset_message">Cookies, localStorage и кэш этого профиля будут удалены. Остальные профили не затрагиваются.</string>

@@ -14,6 +14,10 @@
         android:title="@string/menu_github_repos" />
 
     <item
+        android:id="@+id/card_diagnostics"
+        android:title="@string/diag_title" />
+
+    <item
         android:id="@+id/card_settings"
         android:title="@string/menu_profile_settings" />
 

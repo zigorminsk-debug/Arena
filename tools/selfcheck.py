@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -311,6 +313,42 @@ for workflow in sorted(workflow_dir.glob("*.y*ml")):
             value = stripped.split("uses:", 1)[1].split("#")[0].strip()
             if "@" not in value:
                 err(f"{rel}: у действия {value} не указана версия (@vN)")
+
+# ------------------------------------------------------- JS в assets (node)
+
+js_dir = APP / "assets" / "js"
+node = shutil.which("node") or shutil.which("nodejs")
+js_files = sorted(js_dir.glob("*.js")) if js_dir.exists() else []
+
+if not js_files:
+    warn("в app/src/main/assets/js нет скриптов — страница останется без подсказок")
+elif node is None:
+    warn("node не найден — синтаксис JS в assets/js не проверен")
+else:
+    for js in js_files:
+        try:
+            result = subprocess.run(
+                [node, "--check", str(js)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except Exception as exc:  # noqa: BLE001
+            warn(f"{js.relative_to(ROOT)}: не удалось проверить ({exc})")
+            continue
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            err(f"{js.relative_to(ROOT)}: синтаксическая ошибка JS — {detail[-1] if detail else 'без деталей'}")
+
+    # скрипты вызываются из Kotlin по имени: проверяем, что имена совпадают
+    scripts_kt = APP / "java" / "ai" / "arena" / "mobile" / "Scripts.kt"
+    if scripts_kt.exists():
+        declared = set(re.findall(r'const val [A-Z_]+ = "([^"]+\.js)"', read(scripts_kt)))
+        present = {js.name for js in js_files}
+        for missing in sorted(declared - present):
+            err(f"Scripts.kt ссылается на assets/js/{missing}, которого нет")
+        for unused in sorted(present - declared):
+            warn(f"assets/js/{unused} не упомянут в Scripts.kt")
 
 # ------------------------------------------------------------ прочие файлы
 

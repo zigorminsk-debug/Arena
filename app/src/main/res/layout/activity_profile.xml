@@ -5,7 +5,47 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?android:attr/colorBackground"
-    android:orientation="vertical">
+    android:orientation="horizontal">
+
+    <!-- Панель профилей: показывается на широких экранах (планшеты, складные) -->
+    <LinearLayout
+        android:id="@+id/railProfiles"
+        android:layout_width="76dp"
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurface"
+        android:orientation="vertical"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/railItems"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical" />
+
+        <TextView
+            android:id="@+id/railList"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_horizontal"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="@string/menu_profiles"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="⋮"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="22sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical">
 
     <!-- Шапка. Обычный LinearLayout: никаких CoordinatorLayout-перехватов касаний,
          чтобы прокрутка страницы отдавалась WebView целиком. -->
@@ -108,4 +148,5 @@
             </LinearLayout>
         </FrameLayout>
     </ai.arena.mobile.ArenaSwipeRefreshLayout>
+    </LinearLayout>
 </LinearLayout>

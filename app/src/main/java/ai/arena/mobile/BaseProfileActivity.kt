@@ -8,17 +8,23 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -29,15 +35,16 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebViewDatabase
-import android.webkit.RenderProcessGoneDetail
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import ai.arena.mobile.databinding.ActivityProfileBinding
+import kotlin.math.abs
 import org.json.JSONObject
 
 /**
@@ -49,12 +56,14 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     protected abstract val profileId: String
 
     private lateinit var binding: ActivityProfileBinding
+    private lateinit var appLockGate: AppLockGate
     private var webView: WebView? = null
     private var profile: Profile? = null
     private var lastKnownUrl: String = Links.HOME
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingSharedText: String? = null
     private var pendingPermissionRequest: PermissionRequest? = null
+    private var contentStarted = false
 
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -83,32 +92,54 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         binding = ActivityProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        profile = ProfileStore.get(this, profileId)
-        pendingSharedText = intent?.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
-        setupUi()
-        setupWebView()
-        applyProfileChrome()
-        loadInitialUrl(intent)
+        appLockGate = AppLockGate(this)
+        appLockGate.ensure { startProfileContent(intent) }
     }
 
     private fun prepareProcessDataDirectory() {
         try {
             WebView.setDataDirectorySuffix(profileId)
+            WebViewState.markApplied()
         } catch (t: Throwable) {
-            // WebView уже инициализирован в этом процессе — суффикс изменить нельзя.
+            // WebView уже инициализирован в этом процессе — суффикс изменить нельзя
+            WebViewState.markFailed(t.message ?: t.javaClass.simpleName)
         }
+    }
+
+    /** Всё, что требует разблокированного приложения (создаёт WebView). */
+    private fun startProfileContent(intent: Intent?) {
+        if (contentStarted) return
+        contentStarted = true
+
+        profile = ProfileStore.get(this, profileId)
+        pendingSharedText = intent?.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
+        setupUi()
+        setupWebView()
+        applyProfileChrome()
+        setupRail()
+        attachHeaderSwipe()
+        loadInitialUrl(intent)
+        warnIfSessionLost()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val url = intent.getStringExtra(ProfileRouter.EXTRA_URL)
         pendingSharedText = intent.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
-        if (!url.isNullOrBlank()) loadUrl(url) else if (pendingSharedText != null) webView?.reload()
+        val url = intent.getStringExtra(ProfileRouter.EXTRA_URL)
+        if (!url.isNullOrBlank()) {
+            loadUrl(url)
+        } else if (pendingSharedText != null) {
+            webView?.reload()
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        if (!contentStarted) return
+        // Возврат в приложение после долгого фона: спрашиваем подтверждение снова
+        appLockGate.ensure { }
+
         val fresh = ProfileStore.get(this, profileId)
         val previous = profile
         profile = fresh
@@ -122,8 +153,24 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         }
     }
 
+    /**
+     * При сворачивании сохраняем cookies на диск: WebView пишет их с задержкой,
+     * а процесс профиля Android может убить сразу — тогда вход теряется.
+     */
+    override fun onStop() {
+        if (contentStarted) {
+            SessionKeeper.flush()
+            if (SettingsStore.read(this).keepSession) {
+                SessionKeeper.persistAuthCookies()
+            }
+            SessionKeeper.saveSnapshot(this, profileId)
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
         try {
+            SessionKeeper.flush()
             binding.webView.removeJavascriptInterface(WebBridge.JS_NAME)
             (binding.webView.parent as? ViewGroup)?.removeView(binding.webView)
             binding.webView.destroy()
@@ -162,6 +209,91 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 }
             }
         )
+    }
+
+    /** Панель профилей слева: включается на широких экранах (планшеты, складные). */
+    private fun setupRail() {
+        val wide = resources.configuration.smallestScreenWidthDp >= 600
+        val profiles = ProfileStore.all(this)
+        if (!wide || profiles.size < 2) {
+            binding.railProfiles.isVisible = false
+            return
+        }
+
+        binding.railProfiles.isVisible = true
+        binding.railItems.removeAllViews()
+        binding.railList.setOnClickListener { ProfileRouter.openChooser(this) }
+
+        val density = resources.displayMetrics.density
+        val size = (44 * density).toInt()
+
+        profiles.forEach { entry ->
+            val active = entry.id == profileId
+            val avatar = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                    bottomMargin = (8 * density).toInt()
+                }
+                gravity = Gravity.CENTER
+                text = profileInitial(entry)
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                background = circleDrawable(parseColorSafe(entry.color), if (active) 255 else 120)
+                isClickable = true
+                isFocusable = true
+                contentDescription = entry.name
+                setOnClickListener {
+                    if (!active) ProfileRouter.switch(this@BaseProfileActivity, entry.id)
+                }
+                setOnLongClickListener {
+                    Sheets.showEdit(this@BaseProfileActivity, entry.id) { }
+                    true
+                }
+            }
+            binding.railItems.addView(avatar)
+        }
+    }
+
+    /** Свайп по шапке переключает профили (свайп от края экрана не трогаем — там системный жест). */
+    private fun attachHeaderSwipe() {
+        val threshold = 80 * resources.displayMetrics.density
+        var downX = 0f
+        var downY = 0f
+        var tracking = false
+
+        binding.toolbar.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    tracking = true
+                }
+
+                MotionEvent.ACTION_UP -> {
+                    if (tracking) {
+                        val dx = event.rawX - downX
+                        val dy = event.rawY - downY
+                        if (abs(dx) > threshold && abs(dy) < threshold) switchProfileBy(dx < 0)
+                    }
+                    tracking = false
+                }
+
+                MotionEvent.ACTION_CANCEL -> tracking = false
+            }
+            false // клики по кнопкам шапки не перехватываем
+        }
+    }
+
+    private fun switchProfileBy(next: Boolean) {
+        val profiles = ProfileStore.all(this)
+        if (profiles.size < 2) return
+        val index = profiles.indexOfFirst { it.id == profileId }
+        if (index < 0) return
+        val target = if (next) {
+            profiles[(index + 1) % profiles.size]
+        } else {
+            profiles[(index - 1 + profiles.size) % profiles.size]
+        }
+        ProfileRouter.switch(this, target.id)
     }
 
     private fun applyProfileChrome() {
@@ -300,6 +432,14 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             ProfileStore.markUsed(this@BaseProfileActivity, profileId, current)
             injectPageHelpers(view, current)
             pendingSharedText?.let { injectSharedText(view, it) }
+
+            // Страница Arena загрузилась: фиксируем cookies, чтобы вход не потерялся
+            if (Diagnostics.hostOf(current)?.endsWith("arena.ai") == true) {
+                SessionKeeper.flush()
+                if (SettingsStore.read(this@BaseProfileActivity).keepSession) {
+                    SessionKeeper.persistAuthCookies()
+                }
+            }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -458,17 +598,15 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     // --------------------------------------------------------------- GitHub
 
-    /** Навешивает на страницу вспомогательные скрипты: состояние прокрутки и логин GitHub. */
+    /** Навешивает на страницу вспомогательные скрипты: прокрутка и логин GitHub. */
     private fun injectPageHelpers(view: WebView, url: String) {
-        view.evaluateJavascript(WebBridge.SCROLL_SCRIPT, null)
+        Scripts.load(this, Scripts.SCROLL_TRACKER).takeIf { it.isNotEmpty() }
+            ?.let { view.evaluateJavascript(it, null) }
 
-        val host = try {
-            Uri.parse(url).host
-        } catch (t: Throwable) {
-            null
-        } ?: return
+        val host = Diagnostics.hostOf(url) ?: return
         if (!host.endsWith("github.com")) return
-        view.evaluateJavascript(WebBridge.PROBE_SCRIPT, null)
+        Scripts.load(this, Scripts.GITHUB_PROBE).takeIf { it.isNotEmpty() }
+            ?.let { view.evaluateJavascript(it, null) }
     }
 
     /** Страница сообщила, что находится в самом верху (или наоборот). */
@@ -488,25 +626,19 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         } catch (t: Throwable) {
             // ignore
         }
-        view.evaluateJavascript(WebBridge.sharedTextScript(JSONObject.quote(text)), null)
+        val script = Scripts.load(this, Scripts.SHARED_TEXT)
+        if (script.isEmpty()) {
+            onSharedTextResult(false)
+            return
+        }
+        view.evaluateJavascript(script, null)
+        view.evaluateJavascript(Scripts.sharedTextCall(JSONObject.quote(text)), null)
     }
 
     override fun onSharedTextResult(injected: Boolean) {
         runOnUiThread {
             toast(getString(if (injected) R.string.shared_text_pasted else R.string.shared_text_copied))
         }
-    }
-
-    /** Очистка кэша внутри самого профиля: вход в аккаунт сохраняется. */
-    private fun clearCacheInline() {
-        ProfileStore.markCacheClean(this, profileId)
-        try {
-            webView?.clearCache(true)
-            webView?.clearFormData()
-        } catch (t: Throwable) {
-            // ignore
-        }
-        toast(getString(R.string.toast_cache_cleared))
     }
 
     override fun onGithubLogin(login: String) {
@@ -520,7 +652,21 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         }
     }
 
-    // ------------------------------------------------------------- меню
+    // ------------------------------------------------------- состояние входа
+
+    /**
+     * Если в прошлый раз вход был, а сейчас cookies авторизации нет — вход не
+     * пережил перезапуск. Сообщаем один раз, дальше подсказка не повторяется.
+     */
+    private fun warnIfSessionLost() {
+        if (!SettingsStore.read(this).keepSession) return
+        val diff = SessionKeeper.diffWithSnapshot(this, profileId)
+        if (!diff.hasPrevious || !diff.lostAuth) return
+        toast(getString(R.string.session_lost_hint))
+        SessionKeeper.saveSnapshot(this, profileId)
+    }
+
+    // ---------------------------------------------------------------- меню
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_profile, menu)
@@ -529,6 +675,16 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         menu.findItem(R.id.action_desktop)?.isChecked = profile?.desktopMode == true
+
+        // Показываем только выбранные для этого профиля разделы Arena
+        val sections = profile?.sections ?: ProfileSections.DEFAULT
+        menu.findItem(R.id.action_home)?.isVisible = sections.contains(ProfileSections.CHAT)
+        menu.findItem(R.id.action_agent)?.isVisible = sections.contains(ProfileSections.AGENT)
+        menu.findItem(R.id.action_leaderboard)?.isVisible = sections.contains(ProfileSections.LEADERBOARD)
+        menu.findItem(R.id.action_history)?.isVisible = sections.contains(ProfileSections.HISTORY)
+        menu.findItem(R.id.action_github_repos)?.isVisible = sections.contains(ProfileSections.REPOS)
+        menu.findItem(R.id.action_help)?.isVisible = sections.contains(ProfileSections.HELP)
+
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -568,13 +724,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             true
         }
 
-        R.id.action_scroll_top -> {
-            scrollToTop()
-            true
-        }
-
-        R.id.action_app_settings -> {
-            Sheets.showSettings(this) { applyRuntimeSettings() }
+        R.id.action_help -> {
+            loadUrl(Links.HELP)
             true
         }
 
@@ -598,6 +749,16 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             true
         }
 
+        R.id.action_diagnostics -> {
+            Sheets.showDiagnostics(this, profileId, inProfileProcess = true)
+            true
+        }
+
+        R.id.action_scroll_top -> {
+            scrollToTop()
+            true
+        }
+
         R.id.action_profile_settings -> {
             showEditSheet()
             true
@@ -605,6 +766,11 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
         R.id.action_switch -> {
             showSwitchSheet()
+            true
+        }
+
+        R.id.action_app_settings -> {
+            Sheets.showSettings(this) { applyRuntimeSettings() }
             true
         }
 
@@ -630,12 +796,15 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         Sheets.showEdit(
             activity = this,
             profileId = profileId,
+            onResetRequest = { resetProfileInline() },
+            onClearCacheRequest = { clearCacheInline() },
+            inProfileProcess = true,
             onSaved = {
                 profile = ProfileStore.get(this, profileId)
                 applyProfileChrome()
+                setupRail()
+                invalidateOptionsMenu()
             },
-            onResetRequest = { resetProfileInline() },
-            onClearCacheRequest = { clearCacheInline() },
         )
     }
 
@@ -658,20 +827,34 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             // ignore
         }
         val current = profile
-        if (current != null && current.github.isNotBlank()) {
+        if (current != null) {
             val updated = current.copy(github = "", lastUrl = Links.HOME)
             ProfileStore.update(this, updated)
             profile = updated
             applyProfileChrome()
         }
+        SessionKeeper.saveSnapshot(this, profileId)
         toast(getString(R.string.toast_reset_done))
+    }
+
+    /** Очистка кэша внутри самого профиля: вход в аккаунт сохраняется. */
+    private fun clearCacheInline() {
+        ProfileStore.markCacheClean(this, profileId)
+        try {
+            webView?.clearCache(true)
+            webView?.clearFormData()
+        } catch (t: Throwable) {
+            // ignore
+        }
+        toast(getString(R.string.toast_cache_cleared))
     }
 
     /** Возврат страницы наверх: работает и для внутренних областей прокрутки. */
     private fun scrollToTop() {
         val view = webView ?: return
         view.scrollTo(0, 0)
-        view.evaluateJavascript(WebBridge.SCROLL_TOP_CALL, null)
+        val script = Scripts.load(this, Scripts.SCROLL_TO_TOP)
+        if (script.isNotEmpty()) view.evaluateJavascript(script, null)
     }
 
     private fun currentUrl(): String = webView?.url ?: lastKnownUrl
@@ -700,15 +883,5 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-    }
-
-    @Suppress("unused")
-    private fun confirmResetDialog() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.dialog_reset_title)
-            .setMessage(R.string.dialog_reset_message)
-            .setNegativeButton(R.string.action_cancel, null)
-            .setPositiveButton(R.string.action_reset) { _, _ -> resetProfileInline() }
-            .show()
     }
 }

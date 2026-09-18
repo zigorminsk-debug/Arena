@@ -18,9 +18,14 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: ProfileAdapter
+    private lateinit var backupUi: BackupUi
+    private lateinit var appLockGate: AppLockGate
+    private var pendingDeepLink: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        backupUi = BackupUi(this)
+        appLockGate = AppLockGate(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
@@ -36,8 +41,10 @@ class MainActivity : AppCompatActivity() {
             ProfileRouter.open(this, ProfileStore.lastUsed(this).id)
         }
 
-        handleDeepLink(intent)
-        handleSharedText(intent)
+        pendingDeepLink = deepLinkOf(intent)
+
+        // Всё, что открывает профили, делаем только после подтверждения личности
+        appLockGate.ensure { handleAfterUnlock(intent) }
 
         // Тихая проверка обновлений (не чаще раза в 12 часов)
         UpdateChecker.checkAsync(this, manual = false)
@@ -46,7 +53,19 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleDeepLink(intent)
+        deepLinkOf(intent)?.let { pendingDeepLink = it }
+        appLockGate.ensure { handleAfterUnlock(intent) }
+    }
+
+    /** Действия, отложенные до разблокировки: диплинк, автозапуск профиля, «Поделиться». */
+    private fun handleAfterUnlock(intent: Intent?) {
+        val url = pendingDeepLink
+        if (url != null) {
+            pendingDeepLink = null
+            ProfileRouter.open(this, ProfileStore.lastUsed(this).id, url)
+        } else {
+            openLastProfileIfEnabled()
+        }
         handleSharedText(intent)
     }
 
@@ -56,6 +75,13 @@ class MainActivity : AppCompatActivity() {
         // Если обновление уже скачалось — предлагаем установить
         UpdateChecker.installPendingIfReady(this)
         AppShortcuts.syncIfChanged(this)
+        // Возврат в приложение после долгого фона: спрашиваем подтверждение снова
+        appLockGate.ensure { }
+    }
+
+    /** Список профилей перерисовывается после импорта резервной копии. */
+    fun refreshAfterImport() {
+        if (::adapter.isInitialized) refresh()
     }
 
     private fun refresh() {
@@ -70,12 +96,18 @@ class MainActivity : AppCompatActivity() {
         ProfileResetter.finalizePendingCacheCleans(this)
     }
 
-    /** Открытие ссылок arena.ai (в том числе из письма-подтверждения). */
-    private fun handleDeepLink(intent: Intent?) {
-        val uri = intent?.data ?: return
-        val host = uri.host ?: return
-        if (!host.endsWith("arena.ai")) return
-        ProfileRouter.open(this, ProfileStore.lastUsed(this).id, uri.toString())
+    /** «Открывать сразу последний профиль»: список не задерживает пользователя. */
+    private fun openLastProfileIfEnabled() {
+        if (!SettingsStore.read(this).openLastProfile) return
+        val last = ProfileStore.lastUsed(this)
+        if (last.lastUsed <= 0L) return
+        startActivity(ProfileRouter.intent(this, last.id))
+    }
+
+    private fun deepLinkOf(intent: Intent?): String? {
+        val uri = intent?.data ?: return null
+        val host = uri.host ?: return null
+        return if (host.endsWith("arena.ai")) uri.toString() else null
     }
 
     /**
@@ -118,6 +150,11 @@ class MainActivity : AppCompatActivity() {
 
                 R.id.card_github_repos -> {
                     ProfileRouter.open(this, profile.id, Links.githubRepos(profile.github))
+                    true
+                }
+
+                R.id.card_diagnostics -> {
+                    Sheets.showDiagnostics(this, profile.id, inProfileProcess = false)
                     true
                 }
 
@@ -175,7 +212,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
         R.id.action_settings -> {
-            Sheets.showSettings(this) { refresh() }
+            Sheets.showSettings(
+                activity = this,
+                onChange = { refresh() },
+                onExport = { backupUi.export() },
+                onImport = { backupUi.import() },
+            )
+            true
+        }
+
+        R.id.action_lock_now -> {
+            AppLock.lockNow(this)
+            Toast.makeText(this, R.string.menu_lock_now, Toast.LENGTH_SHORT).show()
+            recreate()
             true
         }
 

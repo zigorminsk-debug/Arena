@@ -3,6 +3,54 @@
     <string name="app_name">Arena Mobile</string>
     <string name="app_tagline">arena.ai in your pocket</string>
 
+    <!-- Connection diagnostics -->
+    <string name="diag_title">Connection diagnostics</string>
+    <string name="diag_checking">Checking network, cookies and settings…</string>
+    <string name="diag_copy_report">Copy report</string>
+    <string name="diag_persist_session">Persist session now</string>
+    <string name="diag_recheck">Check again</string>
+    <string name="diag_ok">Connection looks good</string>
+    <string name="diag_session_lost">Sign-in did not survive restart</string>
+    <string name="diag_no_auth_cookie">Sign-in required</string>
+    <string name="diag_in_profile_only">Details are available inside a profile</string>
+    <string name="diag_copied">Report copied</string>
+    <string name="diag_persisted">Cookies persisted: %1$d</string>
+    <string name="diag_nothing_to_persist">No auth cookies found — sign in first</string>
+
+    <!-- App lock -->
+    <string name="lock_title">Unlock Arena Mobile</string>
+    <string name="lock_subtitle">Confirm your identity to open the app</string>
+    <string name="lock_not_available">No biometrics or device lock on this device — protection unavailable</string>
+    <string name="menu_lock_now">Lock now</string>
+    <string name="switch_app_lock">App lock</string>
+    <string name="switch_app_lock_hint">Ask for biometrics or device code when opening the app; again after 5 minutes in background</string>
+
+    <!-- Backup -->
+    <string name="action_export_profiles">Export profiles to file</string>
+    <string name="action_import_profiles">Import profiles from file</string>
+    <string name="backup_exported">Backup file saved</string>
+    <string name="backup_imported">Profiles restored: %1$d</string>
+    <string name="backup_error_format">This is not an Arena Mobile backup file</string>
+    <string name="backup_error_io">Could not read or write the file</string>
+
+    <string name="section_required">This section cannot be disabled</string>
+    <string name="action_save">Save</string>
+    <!-- Profile sections -->
+    <string name="action_choose_sections">Arena sections in menu</string>
+    <string name="dialog_sections_title">Sections to show</string>
+
+    <!-- Session and launch -->
+    <string name="switch_keep_session">Keep session alive</string>
+    <string name="switch_keep_session_hint">WebView does not persist session cookies by itself: enable to keep the Arena sign-in across app restarts</string>
+    <string name="switch_open_last">Open last profile right away</string>
+    <string name="session_lost_hint">Sign-in was not restored. Menu → “Connection diagnostics” shows why</string>
+
+    <!-- Shortcuts -->
+    <string name="shortcut_new_chat">New chat</string>
+    <string name="shortcut_new_chat_long">New chat in “%1$s”</string>
+    <string name="shortcut_agent">Agent Mode</string>
+    <string name="shortcut_agent_long">Agent Mode in “%1$s”</string>
+
     <!-- Arena sections and GitHub -->
     <string name="menu_arena_sections">Arena sections</string>
     <string name="menu_arena_chat">Chat</string>
@@ -94,7 +142,6 @@
     <string name="switch_compat">Sign-in compatibility mode</string>
     <string name="switch_compat_hint">Use if Google sign-in refuses to open in WebView</string>
     <string name="switch_keep_on">Keep screen on</string>
-    <string name="action_save">Save</string>
     <string name="action_reset_profile">Sign out and wipe profile data</string>
     <string name="dialog_reset_title">Wipe profile data?</string>
     <string name="dialog_reset_message">Cookies, localStorage and cache of this profile will be deleted. Other profiles are not affected.</string>

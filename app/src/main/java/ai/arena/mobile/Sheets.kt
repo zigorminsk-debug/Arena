@@ -1,5 +1,8 @@
 package ai.arena.mobile
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.view.Gravity
@@ -11,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import ai.arena.mobile.databinding.ItemProfileRowBinding
+import ai.arena.mobile.databinding.SheetDiagnosticsBinding
 import ai.arena.mobile.databinding.SheetProfileEditBinding
 import ai.arena.mobile.databinding.SheetProfilesBinding
 import ai.arena.mobile.databinding.SheetSettingsBinding
@@ -58,6 +62,8 @@ object Sheets {
         profileId: String,
         onResetRequest: (() -> Unit)? = null,
         onClearCacheRequest: (() -> Unit)? = null,
+        /** true, если шторка открыта внутри процесса профиля (тогда доступны cookies). */
+        inProfileProcess: Boolean = false,
         onSaved: () -> Unit,
     ) {
         val binding = SheetProfileEditBinding.inflate(activity.layoutInflater)
@@ -130,6 +136,17 @@ object Sheets {
             dialog.dismiss()
         }
 
+        binding.btnSections.setOnClickListener {
+            showSections(activity, profileId) {
+                Toast.makeText(activity, R.string.toast_saved, Toast.LENGTH_SHORT).show()
+                onSaved()
+            }
+        }
+
+        binding.btnDiagnostics.setOnClickListener {
+            showDiagnostics(activity, profileId, inProfileProcess)
+        }
+
         binding.btnClearCache.setOnClickListener {
             if (onClearCacheRequest != null) {
                 onClearCacheRequest()
@@ -163,13 +180,111 @@ object Sheets {
         dialog.show()
     }
 
-    fun showSettings(activity: AppCompatActivity, onChange: () -> Unit) {
+    /** Выбор разделов Arena, которые показывать в меню профиля. */
+    fun showSections(activity: AppCompatActivity, profileId: String, onSaved: () -> Unit) {
+        val current = ProfileStore.get(activity, profileId).sections
+        val ids = ProfileSections.ALL
+        val labels = ids.map { activity.getString(ProfileSections.labelRes(it)) }.toTypedArray()
+        val checked = BooleanArray(ids.size) { ids[it] in current || ids[it] in ProfileSections.ALWAYS }
+
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.dialog_sections_title)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (ids[which] in ProfileSections.ALWAYS && !isChecked) {
+                    Toast.makeText(activity, R.string.section_required, Toast.LENGTH_SHORT).show()
+                }
+                checked[which] = isChecked
+            }
+            .setNegativeButton(R.string.action_cancel, null)
+            .setPositiveButton(R.string.action_save) { _, _ ->
+                val picked = ids.filterIndexed { index, _ ->
+                    checked[index] || ids[index] in ProfileSections.ALWAYS
+                }
+                val profile = ProfileStore.get(activity, profileId)
+                ProfileStore.update(activity, profile.copy(sections = ProfileSections.normalize(picked)))
+                onSaved()
+            }
+            .show()
+    }
+
+    /**
+     * Экран «Диагностика подключения»: показывает, сохранились ли cookies входа,
+     * доступны ли arena.ai и GitHub, где лежат данные профиля и какова версия WebView.
+     * Сеть проверяется в фоне, поэтому шторка открывается сразу.
+     */
+    fun showDiagnostics(activity: AppCompatActivity, profileId: String, inProfileProcess: Boolean) {
+        val binding = SheetDiagnosticsBinding.inflate(activity.layoutInflater)
+        val dialog = BottomSheetDialog(activity)
+        val profile = ProfileStore.get(activity, profileId)
+
+        binding.btnPersistSession.isVisible = inProfileProcess
+        binding.tvStatus.text = activity.getString(R.string.diag_checking)
+        binding.tvReport.text = ""
+
+        var lastText = ""
+
+        fun runCheck() {
+            binding.tvStatus.text = activity.getString(R.string.diag_checking)
+            Thread {
+                val report = Diagnostics.collect(activity, profile, inProfileProcess)
+                val text = Diagnostics.render(activity, report)
+                activity.runOnUiThread {
+                    if (activity.isFinishing) return@runOnUiThread
+                    lastText = text
+                    binding.tvReport.text = text
+                    binding.tvStatus.text = Diagnostics.statusLine(activity, report)
+                }
+            }.apply { isDaemon = true }.start()
+        }
+
+        binding.btnRefresh.setOnClickListener { runCheck() }
+
+        binding.btnCopyReport.setOnClickListener {
+            if (lastText.isEmpty()) {
+                Toast.makeText(activity, R.string.diag_checking, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            try {
+                val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Arena diagnostics", lastText))
+                Toast.makeText(activity, R.string.diag_copied, Toast.LENGTH_SHORT).show()
+            } catch (t: Throwable) {
+                // ignore
+            }
+        }
+
+        binding.btnPersistSession.setOnClickListener {
+            val count = SessionKeeper.persistAuthCookies()
+            SessionKeeper.flush()
+            val message = if (count > 0) {
+                activity.getString(R.string.diag_persisted, count)
+            } else {
+                activity.getString(R.string.diag_nothing_to_persist)
+            }
+            Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
+            runCheck()
+        }
+
+        dialog.setContentView(binding.root)
+        dialog.show()
+        runCheck()
+    }
+
+    fun showSettings(
+        activity: AppCompatActivity,
+        onChange: () -> Unit,
+        onExport: (() -> Unit)? = null,
+        onImport: (() -> Unit)? = null,
+    ) {
         val binding = SheetSettingsBinding.inflate(activity.layoutInflater)
         val dialog = BottomSheetDialog(activity)
 
         val settings = SettingsStore.read(activity)
         binding.swZoom.isChecked = settings.pinchZoom
         binding.swPull.isChecked = settings.pullToRefresh
+        binding.swKeepSession.isChecked = settings.keepSession
+        binding.swOpenLast.isChecked = settings.openLastProfile
+        binding.swAppLock.isChecked = settings.appLock
         binding.themeGroup.check(
             when (settings.themeMode) {
                 SettingsStore.THEME_LIGHT -> R.id.btnThemeLight
@@ -208,6 +323,38 @@ object Sheets {
         binding.swPull.setOnCheckedChangeListener { _, checked ->
             SettingsStore.write(activity, SettingsStore.read(activity).copy(pullToRefresh = checked))
             onChange()
+        }
+
+        binding.swKeepSession.setOnCheckedChangeListener { _, checked ->
+            SettingsStore.write(activity, SettingsStore.read(activity).copy(keepSession = checked))
+            onChange()
+        }
+
+        binding.swOpenLast.setOnCheckedChangeListener { _, checked ->
+            SettingsStore.write(activity, SettingsStore.read(activity).copy(openLastProfile = checked))
+            onChange()
+        }
+
+        binding.swAppLock.setOnCheckedChangeListener { _, checked ->
+            SettingsStore.write(activity, SettingsStore.read(activity).copy(appLock = checked))
+            if (!checked) AppLock.markUnlocked(activity)
+            onChange()
+        }
+
+        binding.btnExport.setOnClickListener {
+            if (onExport != null) {
+                onExport()
+            } else {
+                Toast.makeText(activity, R.string.backup_error_io, Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnImport.setOnClickListener {
+            if (onImport != null) {
+                onImport()
+            } else {
+                Toast.makeText(activity, R.string.backup_error_io, Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.btnResetAll.setOnClickListener {

@@ -14,6 +14,15 @@ data class AppSettings(
      * с собственной областью прокрутки жест может отбирать касания у страницы.
      */
     val pullToRefresh: Boolean = false,
+    /** Открывать сразу последний профиль, минуя список. */
+    val openLastProfile: Boolean = false,
+    /**
+     * Продлевать cookies авторизации arena.ai, чтобы вход переживал перезапуск
+     * приложения (WebView не сохраняет cookies сессии сам).
+     */
+    val keepSession: Boolean = true,
+    /** Просить биометрию или код устройства при входе в приложение. */
+    val appLock: Boolean = false,
 )
 
 /** Настройки всего приложения — в JSON, чтобы их видели все процессы. */
@@ -45,6 +54,9 @@ object SettingsStore {
                 themeMode = mode,
                 pinchZoom = json.optBoolean("pinchZoom", false),
                 pullToRefresh = json.optBoolean("pullToRefresh", false),
+                openLastProfile = json.optBoolean("openLastProfile", false),
+                keepSession = json.optBoolean("keepSession", true),
+                appLock = json.optBoolean("appLock", false),
             )
         }
     } catch (t: Throwable) {
@@ -58,6 +70,9 @@ object SettingsStore {
                 .put("themeMode", settings.themeMode)
                 .put("pinchZoom", settings.pinchZoom)
                 .put("pullToRefresh", settings.pullToRefresh)
+                .put("openLastProfile", settings.openLastProfile)
+                .put("keepSession", settings.keepSession)
+                .put("appLock", settings.appLock)
             val f = file(ctx)
             val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(json.toString())
