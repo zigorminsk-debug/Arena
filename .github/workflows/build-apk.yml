@@ -284,6 +284,35 @@ jobs:
             echo "::warning::отпечаток ключа (${DEBUG_FP}) отличается от ожидаемого (${EXPECTED_FP}) — проверьте keystore/arena-release.p12"
           fi
 
+          # --- R8 не должен ломать то, что используется по имени ---
+          # Разметки ссылаются на кастомные View по имени класса, а JS вызывает
+          # методы моста по имени: если R8 их переименует, экран профиля упадёт.
+          FAILED=0
+          check_names() {
+            local apk="$1" label="$2"
+            for name in "ai/arena/mobile/ArenaSwipeRefreshLayout" "reportScroll" "reportGithub"; do
+              if unzip -p "$apk" classes.dex 2>/dev/null | grep -aq "$name"; then
+                echo "$label: $name — на месте"
+              else
+                echo "::error::$label: в dex нет '$name' — R8 переименовал то, что вызывается по имени"
+                FAILED=1
+              fi
+            done
+            if "$AAPT" dump xmltree --file res/layout/activity_profile.xml "$apk" 2>/dev/null \
+               | grep -q "ArenaSwipeRefreshLayout"; then
+              echo "$label: разметка ссылается на кастомный View по имени"
+            else
+              echo "::warning::$label: не нашёл ссылку на кастомный View в разметке внутри APK"
+            fi
+          }
+
+          for apk in dist/*.apk dist/*/*.apk; do
+            [ -f "$apk" ] || continue
+            check_names "$apk" "$(basename "$apk")"
+          done
+
+          [ "$FAILED" = "0" ] || exit 1
+
       - name: Итоги сборки
         if: steps.build.outputs.status == '0'
         env:
