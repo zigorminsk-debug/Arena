@@ -3,6 +3,8 @@
     <string name="app_name">Arena Mobile</string>
     <string name="app_tagline">arena.ai in your pocket</string>
 
+    <string name="draft_restored">Draft restored into the input after rotation</string>
+    <string name="draft_restored_files">Draft restored, attachments: %1$d</string>
     <!-- Connection diagnostics -->
     <string name="diag_title">Connection diagnostics</string>
     <string name="diag_checking">Checking network, cookies and settings…</string>

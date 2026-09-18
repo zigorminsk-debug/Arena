@@ -56,6 +56,13 @@ data class DiagnosticReport(
     val githubStatus: String,
     val githubApiStatus: String,
     val checkedAt: Long,
+    val activityCreates: Int,
+    val configChanges: Int,
+    val lastConfigChange: String?,
+    val lastConfigChangeAt: Long,
+    val pageLoads: Int,
+    val draftRestores: Int,
+    val lastDraftRestoreAt: Long,
 )
 
 /**
@@ -103,6 +110,13 @@ object Diagnostics {
             githubStatus = httpStatus("https://github.com/"),
             githubApiStatus = httpStatus("https://api.github.com/"),
             checkedAt = System.currentTimeMillis(),
+            activityCreates = ViewStateStats.activityCreates,
+            configChanges = ViewStateStats.configChanges,
+            lastConfigChange = ViewStateStats.lastConfigChange,
+            lastConfigChangeAt = ViewStateStats.lastConfigChangeAt,
+            pageLoads = ViewStateStats.pageLoads,
+            draftRestores = ViewStateStats.draftRestores,
+            lastDraftRestoreAt = ViewStateStats.lastDraftRestoreAt,
         )
     }
 
@@ -193,6 +207,23 @@ object Diagnostics {
         builder.appendLine("api.github.com: ${report.githubApiStatus}")
         builder.appendLine()
 
+        builder.appendLine("— Экран и страница —")
+        if (report.inProfileProcess) {
+            builder.appendLine("Созданий экрана профиля: ${report.activityCreates}")
+            builder.appendLine("Изменений конфигурации (повороты и т.п.): ${report.configChanges}")
+            if (report.lastConfigChangeAt > 0L) {
+                builder.appendLine("  последнее: ${timeOf(report.lastConfigChangeAt)} — ${report.lastConfigChange}")
+            }
+            builder.appendLine("Загрузок страницы arena.ai: ${report.pageLoads}")
+            builder.appendLine("Восстановлений черновика после поворота: ${report.draftRestores}")
+            if (report.lastDraftRestoreAt > 0L) {
+                builder.appendLine("  последнее: ${timeOf(report.lastDraftRestoreAt)}")
+            }
+        } else {
+            builder.appendLine("Раздел доступен только внутри профиля")
+        }
+        builder.appendLine()
+
         builder.appendLine("— Режимы профиля —")
         builder.appendLine("Версия для ПК: ${mark(report.desktopMode)}")
         builder.appendLine("Режим совместимости входа: ${mark(report.signInCompat)}")
@@ -230,6 +261,18 @@ object Diagnostics {
         if (report.signInCompat.not() && report.inProfileProcess && !report.authCookiePresent) {
             hints.add("Попробуйте «Режим совместимости входа» в настройках профиля")
         }
+        if (report.activityCreates > 1 && report.inProfileProcess) {
+            hints.add(
+                "Экран профиля пересоздавался (${report.activityCreates} раз) — пришлите отчёт: " +
+                    "из-за этого черновик может теряться при повороте"
+            )
+        }
+        if (report.draftRestores > 0 && report.inProfileProcess) {
+            hints.add(
+                "Черновик восстанавливался после поворота ${report.draftRestores} раз — " +
+                    "приложите отчёт, если это повторяется часто"
+            )
+        }
         if (hints.isEmpty()) {
             hints.add("Проблем не видно: сеть доступна, cookies на месте")
         }
@@ -237,6 +280,9 @@ object Diagnostics {
     }
 
     private fun mark(value: Boolean): String = if (value) "да" else "нет"
+
+    private fun timeOf(at: Long): String =
+        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(at))
 
     /** Короткая подпись состояния для карточки профиля. */
     fun statusLine(ctx: Context, report: DiagnosticReport): String = when {
@@ -273,5 +319,9 @@ object Diagnostics {
         put("github", report.githubStatus)
         put("api", report.githubApiStatus)
         put("webView", report.webViewVersion)
+        put("activityCreates", report.activityCreates)
+        put("configChanges", report.configChanges)
+        put("pageLoads", report.pageLoads)
+        put("draftRestores", report.draftRestores)
     }.toString()
 }

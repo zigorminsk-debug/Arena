@@ -3,6 +3,8 @@
     <string name="app_name">Arena Mobile</string>
     <string name="app_tagline">arena.ai на твоём телефоне</string>
 
+    <string name="draft_restored">Черновик возвращён в поле ввода после поворота</string>
+    <string name="draft_restored_files">Черновик и вложений восстановлено: %1$d</string>
     <!-- Диагностика подключения -->
     <string name="diag_title">Диагностика подключения</string>
     <string name="diag_checking">Проверяю сеть, cookies и настройки…</string>

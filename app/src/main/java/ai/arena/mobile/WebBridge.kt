@@ -17,6 +17,9 @@ class WebBridge(private val host: Host) {
 
         /** Результат попытки подставить присланный извне текст в поле ввода. */
         fun onSharedTextResult(injected: Boolean)
+
+        /** Черновик восстановлен после перерисовки страницы (например, при повороте). */
+        fun onDraftRestored(textRestored: Boolean, filesRestored: Int)
     }
 
     @JavascriptInterface
@@ -35,6 +38,12 @@ class WebBridge(private val host: Host) {
     @JavascriptInterface
     fun reportSharedText(injected: Boolean) {
         host.onSharedTextResult(injected)
+    }
+
+    @JavascriptInterface
+    fun reportDraftRestored(textRestored: Boolean, filesRestored: Int) {
+        val files = filesRestored.coerceIn(0, 20)
+        host.onDraftRestored(textRestored, files)
     }
 
     @JavascriptInterface

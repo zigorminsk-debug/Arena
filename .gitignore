@@ -29,3 +29,5 @@ Thumbs.db
 !keystore/arena-release.p12
 !keystore/keystore.properties
 !keystore/README.md
+__pycache__/
+*.pyc

@@ -13,6 +13,7 @@ object Scripts {
     const val SCROLL_TRACKER = "scroll_tracker.js"
     const val SCROLL_TO_TOP = "scroll_to_top.js"
     const val SHARED_TEXT = "shared_text.js"
+    const val COMPOSER_KEEPER = "composer_keeper.js"
 
     private val cache = HashMap<String, String>()
 

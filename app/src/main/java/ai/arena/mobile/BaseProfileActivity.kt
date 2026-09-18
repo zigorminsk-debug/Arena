@@ -7,6 +7,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -62,6 +63,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var lastKnownUrl: String = Links.HOME
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
     private var pendingSharedText: String? = null
+    private var restoreBundle: Bundle? = null
+    private var restoredUrl: String? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var contentStarted = false
 
@@ -88,7 +91,11 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         // разводит данные профилей по разным каталогам WebView.
         prepareProcessDataDirectory()
         super.onCreate(savedInstanceState)
+        restoreBundle = savedInstanceState?.getBundle(STATE_WEBVIEW)
+        restoredUrl = savedInstanceState?.getString(STATE_URL)
+        pendingSharedText = savedInstanceState?.getString(ProfileRouter.EXTRA_SHARED_TEXT)
 
+        ViewStateStats.onActivityCreate()
         binding = ActivityProfileBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -112,13 +119,14 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         contentStarted = true
 
         profile = ProfileStore.get(this, profileId)
-        pendingSharedText = intent?.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
+        pendingSharedText = pendingSharedText
+            ?: intent?.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
         setupUi()
         setupWebView()
         applyProfileChrome()
         setupRail()
         attachHeaderSwipe()
-        loadInitialUrl(intent)
+        restoreOrLoad(intent)
         warnIfSessionLost()
     }
 
@@ -166,6 +174,39 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             SessionKeeper.saveSnapshot(this, profileId)
         }
         super.onStop()
+    }
+
+    /**
+     * Поворот экрана (и любое изменение конфигурации) приходит сюда: экран НЕ
+     * пересоздаётся, WebView остаётся тем же, поэтому текст и вложения в
+     * странице не теряются. Здесь обновляем только то, что зависит от размеров.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ViewStateStats.onConfigChange(ViewStateStats.describe(newConfig))
+        if (!contentStarted) return
+        setupRail()
+        applyProfileChrome()
+        applyRuntimeSettings()
+        binding.swipe.resetScrollState()
+    }
+
+    /**
+     * Страховка на случай, если экран всё же пересоздан системой: сохраняем
+     * состояние WebView (адрес, историю), чтобы вернуть страницу, а не грузить
+     * её заново.
+     */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_URL, webView?.url ?: lastKnownUrl)
+        pendingSharedText?.let { outState.putString(ProfileRouter.EXTRA_SHARED_TEXT, it) }
+        try {
+            val webState = Bundle()
+            binding.webView.saveState(webState)
+            outState.putBundle(STATE_WEBVIEW, webState)
+        } catch (t: Throwable) {
+            // WebView не успел подняться — состояния нет, ничего страшного
+        }
     }
 
     override fun onDestroy() {
@@ -385,11 +426,28 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
     }
 
+    /** Продолжаем с сохранённого состояния, если экран был пересоздан. */
+    private fun restoreOrLoad(intent: Intent?) {
+        val restored = restoreBundle
+        restoreBundle = null
+        if (restored != null) {
+            try {
+                if (webView?.restoreState(restored) != null) return
+            } catch (t: Throwable) {
+                // состояние не подошло — грузим адрес заново
+            }
+        }
+        loadInitialUrl(intent)
+    }
+
     private fun loadInitialUrl(intent: Intent?) {
         val extra = intent?.getStringExtra(ProfileRouter.EXTRA_URL)
+        val saved = restoredUrl?.takeIf { it.startsWith("http") }
+        restoredUrl = null
         val remembered = profile?.lastUrl?.takeIf { it.startsWith("http") }
         val target = when {
             !extra.isNullOrBlank() -> extra
+            !saved.isNullOrBlank() -> saved
             !remembered.isNullOrBlank() -> remembered
             else -> Links.HOME
         }
@@ -419,6 +477,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             super.onPageStarted(view, url, favicon)
             if (!url.isNullOrBlank()) lastKnownUrl = url
+            if (Diagnostics.hostOf(url)?.endsWith("arena.ai") == true) ViewStateStats.onPageLoad()
             binding.progress.isVisible = true
             binding.errorView.isVisible = false
             // До подтверждения из JS жест «потянуть вниз» не перехватываем
@@ -607,6 +666,13 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             ?.let { view.evaluateJavascript(it, null) }
 
         val host = Diagnostics.hostOf(url) ?: return
+
+        // Сторож черновика: не даёт потерять текст и вложения при повороте экрана
+        if (host.endsWith("arena.ai")) {
+            Scripts.load(this, Scripts.COMPOSER_KEEPER).takeIf { it.isNotEmpty() }
+                ?.let { view.evaluateJavascript(it, null) }
+        }
+
         if (!host.endsWith("github.com")) return
         Scripts.load(this, Scripts.GITHUB_PROBE).takeIf { it.isNotEmpty() }
             ?.let { view.evaluateJavascript(it, null) }
@@ -641,6 +707,19 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     override fun onSharedTextResult(injected: Boolean) {
         runOnUiThread {
             toast(getString(if (injected) R.string.shared_text_pasted else R.string.shared_text_copied))
+        }
+    }
+
+    /** Черновик вернулся в поле ввода после перерисовки страницы (поворот экрана). */
+    override fun onDraftRestored(textRestored: Boolean, filesRestored: Int) {
+        ViewStateStats.onDraftRestored()
+        runOnUiThread {
+            val message = when {
+                filesRestored > 0 -> getString(R.string.draft_restored_files, filesRestored)
+                textRestored -> getString(R.string.draft_restored)
+                else -> return@runOnUiThread
+            }
+            toast(message)
         }
     }
 
@@ -886,5 +965,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    companion object {
+        private const val STATE_WEBVIEW = "profile_webview_state"
+        private const val STATE_URL = "profile_webview_url"
     }
 }
