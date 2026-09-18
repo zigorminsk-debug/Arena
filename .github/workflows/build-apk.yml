@@ -185,6 +185,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
+      - name: Итоги юнит-тестов
+        if: steps.build.outputs.status == '0'
+        run: python3 tools/test_report.py
+
       - name: Собрать артефакты в dist/
         if: steps.build.outputs.status == '0'
         env:
