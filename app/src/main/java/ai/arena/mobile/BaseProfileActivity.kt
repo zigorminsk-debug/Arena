@@ -237,7 +237,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 text = profileInitial(entry)
                 setTextColor(Color.WHITE)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                background = circleDrawable(parseColorSafe(entry.color), if (active) 255 else 120)
+                val fill = parseColorSafe(entry.color)
+                background = circleDrawable(
+                    if (active) fill else (fill and 0x00FFFFFF) or (0x78 shl 24)
+                )
                 isClickable = true
                 isFocusable = true
                 contentDescription = entry.name
@@ -770,7 +773,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         }
 
         R.id.action_app_settings -> {
-            Sheets.showSettings(this) { applyRuntimeSettings() }
+            Sheets.showSettings(this, onChange = { applyRuntimeSettings() })
             true
         }
 
