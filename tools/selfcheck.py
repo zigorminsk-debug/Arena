@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -402,9 +403,32 @@ if workflow_path.exists():
         ("signing-key-v1", "восстановление ключа из метки signing-key-v1"),
         ("EXPECTED_FINGERPRINT", "сверка отпечатка постоянного ключа"),
         ("rotate_key", "создание нового ключа только по явному запросу"),
+        ('-Prepo=', "передача репозитория для самообновления (GITHUB_REPOSITORY)"),
     ):
         if needle not in workflow_text:
             err(f"build-apk.yml: пропала защита подписи — {explanation} ({needle})")
+
+# ------------------------------------- работа в свежем клоне и переносимость
+
+# Инструкции для агентов: проект должен собираться в любом окружении.
+agents_md = ROOT / "AGENTS.md"
+if not agents_md.exists():
+    err("нет AGENTS.md — инструкции для агентов (синхронизация воркспейса, ключ, сборка)")
+else:
+    agents_text = read(agents_md)
+    for needle, explanation in (
+        ("bootstrap_workspace.sh", "синхронизация воркспейса"),
+        ("signing-key-v1", "правило про постоянный ключ подписи"),
+        ("main", "правило про ветку main как витрину проекта"),
+    ):
+        if needle not in agents_text:
+            err(f"AGENTS.md: не упомянуто «{explanation}» ({needle})")
+
+bootstrap = ROOT / "tools" / "bootstrap_workspace.sh"
+if not bootstrap.exists():
+    err("нет tools/bootstrap_workspace.sh — скрипт синхронизации воркспейса с GitHub")
+elif not os.access(bootstrap, os.X_OK):
+    warn("tools/bootstrap_workspace.sh без права на выполнение (chmod +x)")
 
 # ------------------------------------------------------------ прочие файлы
 
