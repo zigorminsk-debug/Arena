@@ -49,6 +49,11 @@ def collect_apks(roots: list[str]) -> list[Path]:
     return sorted(set(apks))
 
 
+def find_string(data: bytes, needle: str) -> bool:
+    """Строка в бинарном XML может лежать в UTF-8 или UTF-16LE пуле."""
+    return needle.encode() in data or needle.encode("utf-16-le") in data
+
+
 def check_apk(apk: Path) -> bool:
     """True — APK прошёл проверку."""
     ok = True
