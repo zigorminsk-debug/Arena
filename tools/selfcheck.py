@@ -303,6 +303,9 @@ for workflow in sorted(workflow_dir.glob("*.y*ml")):
 
     # Имена outputs, выставляемые через $GITHUB_OUTPUT, тоже должны быть ASCII-идентификаторами.
     for name in re.findall(r'echo\s+"([^"=]+)=', text):
+        if name.startswith("::"):
+            # это команда workflow (::warning::, ::notice::), а не имя output
+            continue
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
             err(f"{rel}: некорректное имя output в GITHUB_OUTPUT: {name!r}")
 

@@ -19,6 +19,10 @@ on:
         description: 'Опубликовать GitHub Release с APK'
         type: boolean
         default: false
+      rotate_key:
+        description: 'СОЗДАТЬ НОВЫЙ ключ подписи (обновления перестанут ставиться поверх!)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -72,36 +76,138 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          ROTATE_KEY: ${{ github.event.inputs.rotate_key }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          # 1. Приватный ключ из секретов имеет приоритет
+          # ------------------------------------------------------------------
+          # ПОСТОЯННЫЙ КЛЮЧ ПОДПИСИ.
+          #
+          # Отпечаток и метка зафиксированы здесь и не меняются: смена ключа
+          # означает одноразовую переустановку приложения у всех, обновления
+          # «поверх» перестают ставиться. Поэтому новый ключ НЕ создаётся
+          # молча — сборка останавливается с ошибкой.
+          #
+          # Ключ ищется по порядку:
+          #   1) секреты репозитория KEYSTORE_BASE64/KEYSTORE_PASSWORD/...;
+          #   2) keystore/ в текущей ветке (keystore/arena-release.p12);
+          #   3) метка signing-key-v1 — она указывает на коммит с ключом
+          #      и живёт независимо от ветвей, поэтому доступна новому агенту
+          #      и любой другой копии репозитория;
+          #   4) релиз с ключом (ассеты signing-key-v1);
+          #   5) только при явном перезапуске с rotate_key=true — новый ключ.
+          # ------------------------------------------------------------------
+          EXPECTED_FINGERPRINT="f711dd937bd6a8c7a43a8d9cc34f54e702e94da64b7f175cd1c575cd114ba4aa"
+          KEYSTORE_TAG="signing-key-v1"
+          KEYSTORE_PATH=""
+          STORE_PASSWORD=""
+          KEY_ALIAS_VALUE="arena"
+
+          normalize_fp() { tr -d ':' | tr 'A-F' 'a-f' | tr -d ' '; }
+
+          detect_store_type() {   # $1 — файл, $2 — пароль
+            if keytool -list -keystore "$1" -storepass "$2" -storetype PKCS12 >/dev/null 2>&1; then
+              echo "PKCS12"
+            else
+              echo "JKS"
+            fi
+          }
+
+          check_key() {   # $1 — файл, $2 — пароль, $3 — алиас
+            local fp
+            fp=$(keytool -list -v -keystore "$1" -storepass "$2" -alias "$3" 2>/dev/null \
+              | grep -m1 "SHA256:" | sed 's/.*SHA256: *//' | normalize_fp || true)
+            if [ -z "${fp:-}" ]; then
+              echo "::error::не удалось прочитать сертификат из $1 (пароль или алиас не подходят)"
+              return 1
+            fi
+            if [ "$fp" != "$EXPECTED_FINGERPRINT" ]; then
+              echo "::error::ключ в $1 не совпадает с постоянным ключом подписи. Ожидается $EXPECTED_FINGERPRINT, получено $fp. С этим ключом обновления НЕ встанут поверх установленного приложения. Восстановите постоянный ключ из метки ${KEYSTORE_TAG} (git show ${KEYSTORE_TAG}:keystore/arena-release.p12) или из релиза с тем же тегом."
+              return 1
+            fi
+            echo "Ключ подписи: $1 (отпечаток $fp) — совпадает с постоянным"
+          }
+
+          # 1. Ключ из секретов репозитория — приоритетный источник
           if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${KEYSTORE_PASSWORD:-}" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+            STORE_TYPE=$(detect_store_type release.jks "$KEYSTORE_PASSWORD")
+            KEY_ALIAS_VALUE="${KEY_ALIAS:-arena}"
             {
               echo "storeFile=release.jks"
               echo "storePassword=${KEYSTORE_PASSWORD}"
-              echo "keyAlias=${KEY_ALIAS:-arena}"
+              echo "keyAlias=${KEY_ALIAS_VALUE}"
               echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
-              echo "storeType=JKS"
+              echo "storeType=${STORE_TYPE}"
             } > keystore.properties
+            if ! check_key release.jks "$KEYSTORE_PASSWORD" "$KEY_ALIAS_VALUE"; then
+              exit 1
+            fi
             echo "source=секреты репозитория" >> "$GITHUB_OUTPUT"
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "Использую ключ из секретов репозитория"
+            echo "::notice::подпись: ключ из секретов репозитория"
             exit 0
           fi
 
-          # 2. Постоянный ключ в репозитории — им подписаны все опубликованные APK
+          # 2. Постоянный ключ в ветке — им подписаны все опубликованные APK
           if [ -f keystore/keystore.properties ] && [ -f keystore/arena-release.p12 ]; then
+            KEYSTORE_PATH="keystore/arena-release.p12"
+            STORE_PASSWORD=$(grep -E '^storePassword=' keystore/keystore.properties | cut -d= -f2-)
+            KEY_ALIAS_VALUE=$(grep -E '^keyAlias=' keystore/keystore.properties | cut -d= -f2-)
+          else
+            # 3. Восстанавливаем из метки: она указывает на коммит с ключом
+            mkdir -p keystore
+            if git fetch --depth=1 origin "+refs/tags/${KEYSTORE_TAG}:refs/tags/${KEYSTORE_TAG}" >/dev/null 2>&1 \
+              && git show "${KEYSTORE_TAG}:keystore/arena-release.p12" > keystore/arena-release.p12 2>/dev/null; then
+              echo "Проверяю ключ из метки ${KEYSTORE_TAG}"
+              git show "${KEYSTORE_TAG}:keystore/keystore.properties" > keystore/keystore.properties 2>/dev/null || true
+              echo "::notice::ключ подписи восстановлен из метки ${KEYSTORE_TAG}"
+            else
+              rm -f keystore/arena-release.p12
+              # 4. Запасной путь: ассеты релиза с тем же тегом
+              if command -v gh >/dev/null 2>&1 \
+                && gh release download "${KEYSTORE_TAG}" -R "${GITHUB_REPOSITORY}" -p "arena-release.p12" -D keystore --clobber >/dev/null 2>&1; then
+                gh release download "${KEYSTORE_TAG}" -R "${GITHUB_REPOSITORY}" -p "keystore.properties" -D keystore --clobber >/dev/null 2>&1 || true
+                echo "::notice::ключ подписи восстановлен из релиза ${KEYSTORE_TAG}"
+              fi
+            fi
+
+            if [ ! -f keystore/keystore.properties ] && [ -f keystore/arena-release.p12 ]; then
+              {
+                echo "storeFile=keystore/arena-release.p12"
+                echo "storePassword=arena-mobile"
+                echo "keyAlias=arena"
+                echo "keyPassword=arena-mobile"
+                echo "storeType=PKCS12"
+              } > keystore/keystore.properties
+            fi
+
+            if [ -f keystore/arena-release.p12 ]; then
+              KEYSTORE_PATH="keystore/arena-release.p12"
+              STORE_PASSWORD=$(grep -E '^storePassword=' keystore/keystore.properties | cut -d= -f2-)
+              KEY_ALIAS_VALUE=$(grep -E '^keyAlias=' keystore/keystore.properties | cut -d= -f2-)
+            fi
+          fi
+
+          if [ -n "$KEYSTORE_PATH" ]; then
+            if ! check_key "$KEYSTORE_PATH" "$STORE_PASSWORD" "$KEY_ALIAS_VALUE"; then
+              exit 1
+            fi
             echo "source=постоянный ключ keystore/arena-release.p12" >> "$GITHUB_OUTPUT"
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "Использую постоянный ключ из репозитория"
+            echo "::notice::подпись: постоянный ключ из репозитория"
             exit 0
           fi
 
-          # 3. Страховка: ключа нет вовсе — создаём постоянный и коммитим его,
-          #    чтобы этот и все следующие APK были подписаны одинаково
-          echo "Постоянный ключ не найден — создаю новый"
+          # 5. Ключа нет нигде. Без явного разрешения новый не создаём:
+          #    с новым ключом обновления не встанут поверх установленного APK.
+          if [ "${ROTATE_KEY:-}" != "true" ]; then
+            echo "::error::постоянный ключ подписи не найден (нет ни в секретах, ни в ветке, ни в метке ${KEYSTORE_TAG}). Сборка остановлена, чтобы НЕ создать другой ключ: с ним обновления перестанут устанавливаться поверх. Восстановите ключ: git fetch origin tag ${KEYSTORE_TAG} && git show ${KEYSTORE_TAG}:keystore/arena-release.p12 > keystore/arena-release.p12 (или скачайте ассет из релиза ${KEYSTORE_TAG}). Если ключ нужно сменить осознанно — перезапустите workflow с включённым rotate_key."
+            exit 1
+          fi
+
+          echo "::warning::запрошена ротация ключа (rotate_key) — создаю НОВЫЙ ключ подписи. Обновления поверх текущих сборок перестанут ставиться, потребуется переустановка приложения."
           mkdir -p keystore
           keytool -genkeypair -noprompt \
             -keystore keystore/arena-release.p12 \
@@ -116,23 +222,14 @@ jobs:
             echo "keyPassword=arena-mobile"
             echo "storeType=PKCS12"
           } > keystore/keystore.properties
-          cat > keystore/README.md <<'EOT'
-          # Постоянный ключ подписи
-
-          `arena-release.p12` — постоянный ключ, которым подписываются debug- и release-APK.
-          Он обязателен для установки обновлений поверх ранее установленного приложения.
-
-          * алиас: `arena`, пароль хранилища и ключа: `arena-mobile`
-          * посмотреть отпечаток: `apksigner verify --print-certs <apk>`
-          EOT
 
           git config user.name "arena-ci"
           git config user.email "arena-ci@users.noreply.github.com"
-          git add -f keystore/arena-release.p12 keystore/keystore.properties keystore/README.md
+          git add -f keystore/arena-release.p12 keystore/keystore.properties
           if git diff --cached --quiet; then
             echo "Коммитить нечего"
           else
-            git commit -m "chore: постоянный ключ подписи APK [skip ci]"
+            git commit -m "chore: новый ключ подписи APK (осознанная ротация) [skip ci]"
             if [[ "$GITHUB_REF" == refs/heads/* ]]; then
               git push origin "HEAD:${GITHUB_REF#refs/heads/}" \
                 || echo "::warning::не удалось запушить ключ подписи — закоммитьте keystore/ вручную"
@@ -140,8 +237,75 @@ jobs:
               echo "::warning::ключ создан вне ветки — закоммитьте keystore/ вручную"
             fi
           fi
-          echo "source=ключ, созданный в CI" >> "$GITHUB_OUTPUT"
+          echo "source=новый ключ, созданный в CI по запросу" >> "$GITHUB_OUTPUT"
           echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Резервная копия ключа подписи
+        if: steps.signing.outputs.signed == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_TAG="signing-key-v1"
+          KEY_URL="repos/${GITHUB_REPOSITORY}/releases/tags/${KEYSTORE_TAG}"
+
+          # Ключ, которым подписана эта сборка
+          KEY_FILE=""
+          for candidate in keystore/arena-release.p12 release.jks; do
+            if [ -f "$candidate" ]; then
+              KEY_FILE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$KEY_FILE" ]; then
+            echo "::warning::файл ключа для резервной копии не найден"
+            exit 0
+          fi
+
+          mkdir -p /tmp/keystore-backup
+          cp "$KEY_FILE" /tmp/keystore-backup/arena-release.p12
+          if [ -f keystore/keystore.properties ]; then
+            cp keystore/keystore.properties /tmp/keystore-backup/keystore.properties
+          else
+            {
+              echo "storeFile=keystore/arena-release.p12"
+              echo "storePassword=arena-mobile"
+              echo "keyAlias=arena"
+              echo "keyPassword=arena-mobile"
+              echo "storeType=PKCS12"
+            } > /tmp/keystore-backup/keystore.properties
+          fi
+
+          NOTES_FILE="keystore/KEY-RESTORE.md"
+          if ! gh api "$KEY_URL" >/dev/null 2>&1; then
+            echo "::notice::релиз ${KEYSTORE_TAG} отсутствует — создаю хранилище ключа"
+            if [ -f "$NOTES_FILE" ]; then
+              gh release create "$KEYSTORE_TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
+                --title "Ключ подписи Arena Mobile — НЕ УДАЛЯТЬ" --notes-file "$NOTES_FILE" \
+                || echo "::warning::не удалось создать релиз ${KEYSTORE_TAG}"
+            else
+              gh release create "$KEYSTORE_TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
+                --title "Ключ подписи Arena Mobile — НЕ УДАЛЯТЬ" \
+                --notes "Резервная копия постоянного ключа подписи APK." \
+                || echo "::warning::не удалось создать релиз ${KEYSTORE_TAG}"
+            fi
+          fi
+
+          LOCAL_SHA=$(sha256sum /tmp/keystore-backup/arena-release.p12 | cut -d' ' -f1)
+          REMOTE_SHA=$(gh api "$KEY_URL" --jq '.assets[] | select(.name=="arena-release.p12") | .digest // ""' 2>/dev/null \
+            | sed 's/^sha256://' || true)
+
+          if [ -n "$LOCAL_SHA" ] && [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+            echo "Резервная копия ключа в релизе ${KEYSTORE_TAG} актуальна (${LOCAL_SHA:0:12}…)"
+          else
+            if gh release upload "$KEYSTORE_TAG" \
+              /tmp/keystore-backup/arena-release.p12 \
+              /tmp/keystore-backup/keystore.properties --clobber >/dev/null 2>&1; then
+              echo "::notice::резервная копия ключа подписи обновлена в релизе ${KEYSTORE_TAG}"
+            else
+              echo "::warning::не удалось обновить резервную копию ключа в релизе ${KEYSTORE_TAG}"
+            fi
+          fi
 
       - name: Статическая проверка проекта
         run: python3 tools/selfcheck.py
@@ -285,7 +449,8 @@ jobs:
           # который зафиксирован в репозитории
           EXPECTED_FP=$(grep -oE 'F7:11:DD:93[0-9A-F:]*' keystore/README.md 2>/dev/null | head -1 | tr -d ':' | tr 'A-F' 'a-f')
           if [ -n "$EXPECTED_FP" ] && [ -n "$DEBUG_FP" ] && [ "$EXPECTED_FP" != "$DEBUG_FP" ]; then
-            echo "::warning::отпечаток ключа (${DEBUG_FP}) отличается от ожидаемого (${EXPECTED_FP}) — проверьте keystore/arena-release.p12"
+            echo "::error::отпечаток ключа (${DEBUG_FP}) отличается от постоянного (${EXPECTED_FP}): APK подписан не тем ключом, обновления не встанут поверх. Восстановите ключ из метки signing-key-v1."
+            exit 1
           fi
 
           # Проверяем, что R8 не переименовал кастомный View и методы JS-моста
