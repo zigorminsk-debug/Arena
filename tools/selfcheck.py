@@ -350,6 +350,30 @@ else:
         for unused in sorted(present - declared):
             warn(f"assets/js/{unused} не упомянут в Scripts.kt")
 
+# ------------------------------------------- поворот экрана и configChanges
+
+REQUIRED_CONFIG_CHANGES = {"orientation", "screenSize", "screenLayout"}
+
+manifest_path = APP / "AndroidManifest.xml"
+manifest_tree = parse_xml(manifest_path)
+if manifest_tree is not None:
+    activities = [
+        node for node in manifest_tree.iter()
+        if node.tag.endswith("activity") and node.get(f"{ANDROID_NS}name")
+    ]
+    for activity in activities:
+        name = activity.get(f"{ANDROID_NS}name", "?")
+        declared = set((activity.get(f"{ANDROID_NS}configChanges") or "").split("|"))
+        missing = REQUIRED_CONFIG_CHANGES - declared
+        if missing:
+            err(
+                f"AndroidManifest.xml: у {name} нет configChanges "
+                f"{', '.join(sorted(missing))} — поворот экрана пересоздаст WebView "
+                f"и потеряет черновик"
+            )
+    if activities:
+        print(f"Поворот экрана: configChanges проверен у {len(activities)} экранов.")
+
 # ------------------------------------------------------------ прочие файлы
 
 for required in (

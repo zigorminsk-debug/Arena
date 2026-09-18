@@ -291,6 +291,17 @@ jobs:
           # Проверяем, что R8 не переименовал кастомный View и методы JS-моста
           python3 tools/check_apk.py dist
 
+          # Манифест собранного APK: набор флагов configChanges читается через aapt2,
+          # потому что внутри APK это битовая маска, а не строки
+          if [ -n "$AAPT" ] && [ -x "$AAPT" ]; then
+            "$AAPT" dump xmltree --file AndroidManifest.xml "$DEBUG_APK" > /tmp/manifest-tree.txt 2>/dev/null || true
+            if [ -s /tmp/manifest-tree.txt ]; then
+              python3 tools/check_manifest.py /tmp/manifest-tree.txt
+            else
+              echo "::warning::не удалось разобрать манифест собранного APK — проверка configChanges пропущена"
+            fi
+          fi
+
       - name: Итоги сборки
         if: steps.build.outputs.status == '0'
         env:
