@@ -60,7 +60,8 @@ Workflow [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) з
 Локальная проверка кода без Android Studio (проверяет ссылки на ресурсы, id и т.д.):
 
 ```bash
-python3 tools/selfcheck.py
+python3 tools/selfcheck.py          # исходники
+python3 tools/check_apk.py dist     # собранные APK: имена для R8, разметки, целостность
 ```
 
 ### Подпись APK — постоянный ключ
