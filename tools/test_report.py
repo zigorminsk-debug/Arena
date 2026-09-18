@@ -50,6 +50,7 @@ def main(argv: list[str]) -> int:
                 (case.get("classname") or "", case.get("name") or "", status)
             )
 
+    print(f"::notice::юнит-тесты: {total} тестов, провалов {failures}, ошибок {errors}, пропущено {skipped}")
     print(f"Юнит-тесты: {total} (провалов {failures}, ошибок {errors}, пропущено {skipped})")
     for classname, name, status in cases:
         print(f"  {MARKS[status]} {classname.split('.')[-1]}: {name}")
