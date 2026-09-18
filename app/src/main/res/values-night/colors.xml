@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Тёмная тема -->
+    <color name="arena_bg">#070B14</color>
+    <color name="arena_surface">#101828</color>
+    <color name="arena_surface_variant">#17203A</color>
+    <color name="arena_on_surface">#E7EBF7</color>
+    <color name="arena_on_surface_variant">#9AA6C4</color>
+    <color name="arena_outline">#26314F</color>
+
+    <color name="arena_primary">#8B5CF6</color>
+    <color name="arena_on_primary">#FFFFFF</color>
+    <color name="arena_secondary">#22D3EE</color>
+    <color name="arena_on_secondary">#06202B</color>
+    <color name="arena_error">#F87171</color>
+    <color name="arena_online">#34D399</color>
+    <color name="arena_offline">#F87171</color>
+    <color name="arena_avatar_text">#FFFFFF</color>
+    <color name="arena_webview_bg">#070B14</color>
+    <color name="arena_gradient_start">#8B5CF6</color>
+    <color name="arena_gradient_end">#22D3EE</color>
+</resources>

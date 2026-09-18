@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ArenaMobile" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/arena_primary</item>
+        <item name="colorOnPrimary">@color/arena_on_primary</item>
+        <item name="colorSecondary">@color/arena_secondary</item>
+        <item name="colorOnSecondary">@color/arena_on_secondary</item>
+        <item name="colorError">@color/arena_error</item>
+        <item name="android:colorBackground">@color/arena_bg</item>
+        <item name="colorSurface">@color/arena_surface</item>
+        <item name="colorSurfaceVariant">@color/arena_surface_variant</item>
+        <item name="colorOnSurface">@color/arena_on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/arena_on_surface_variant</item>
+        <item name="colorOutline">@color/arena_outline</item>
+        <item name="android:statusBarColor">@color/arena_bg</item>
+        <item name="android:navigationBarColor">@color/arena_bg</item>
+        <item name="android:windowBackground">@color/arena_bg</item>
+        <item name="android:windowLightStatusBar">@bool/arena_status_bar_light</item>
+    </style>
+
+    <style name="Widget.Arena.Avatar" parent="">
+        <item name="android:layout_width">44dp</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/arena_avatar_text</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Widget.Arena.AvatarSmall" parent="Widget.Arena.Avatar">
+        <item name="android:layout_width">34dp</item>
+        <item name="android:layout_height">34dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.Arena.CardTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.Arena.SectionTitle" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/arena_on_surface</item>
+    </style>
+</resources>

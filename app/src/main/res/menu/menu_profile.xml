@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_refresh"
+        android:icon="@drawable/ic_refresh"
+        android:title="@string/menu_refresh"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:title="@string/menu_arena_sections"
+        app:showAsAction="never">
+        <menu>
+            <item
+                android:id="@+id/action_home"
+                android:title="@string/menu_arena_chat"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_agent"
+                android:title="@string/menu_agent_github"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_leaderboard"
+                android:title="@string/menu_leaderboard"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_history"
+                android:title="@string/menu_arena_history"
+                app:showAsAction="never" />
+
+            <item
+                android:id="@+id/action_help"
+                android:title="@string/link_help"
+                app:showAsAction="never" />
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/action_github_repos"
+        android:title="@string/menu_github_repos"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_scroll_top"
+        android:title="@string/menu_scroll_top"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_desktop"
+        android:checkable="true"
+        android:title="@string/menu_desktop"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_share"
+        android:title="@string/menu_share"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_copy"
+        android:title="@string/menu_copy_url"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_browser"
+        android:title="@string/menu_open_browser"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_diagnostics"
+        android:title="@string/diag_title"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_profile_settings"
+        android:title="@string/menu_profile_settings"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_switch"
+        android:title="@string/menu_profiles"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_app_settings"
+        android:title="@string/menu_app_settings"
+        app:showAsAction="never" />
+</menu>

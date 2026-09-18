@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arena Mobile</string>
+    <string name="app_tagline">arena.ai на твоём телефоне</string>
+
+    <string name="draft_restored">Черновик возвращён в поле ввода после поворота</string>
+    <string name="draft_restored_files">Черновик и вложений восстановлено: %1$d</string>
+    <!-- Диагностика подключения -->
+    <string name="diag_title">Диагностика подключения</string>
+    <string name="diag_checking">Проверяю сеть, cookies и настройки…</string>
+    <string name="diag_copy_report">Скопировать отчёт</string>
+    <string name="diag_persist_session">Продлить сессию сейчас</string>
+    <string name="diag_recheck">Проверить снова</string>
+    <string name="diag_ok">Подключение в порядке</string>
+    <string name="diag_session_lost">Вход не пережил перезапуск</string>
+    <string name="diag_no_auth_cookie">Нужно войти в аккаунт</string>
+    <string name="diag_in_profile_only">Подробности — внутри профиля</string>
+    <string name="diag_copied">Отчёт скопирован</string>
+    <string name="diag_persisted">Продлено cookies: %1$d</string>
+    <string name="diag_nothing_to_persist">Cookies авторизации не найдены — сначала войдите</string>
+
+    <!-- Блокировка приложения -->
+    <string name="lock_title">Вход в Arena Mobile</string>
+    <string name="lock_subtitle">Подтвердите личность, чтобы открыть приложение</string>
+    <string name="lock_not_available">На устройстве нет биометрии или кода блокировки — защита недоступна</string>
+    <string name="menu_lock_now">Заблокировать сейчас</string>
+    <string name="switch_app_lock">Блокировка входа</string>
+    <string name="switch_app_lock_hint">Просить биометрию или код устройства при открытии приложения; после 5 минут в фоне — снова</string>
+
+    <!-- Резервная копия -->
+    <string name="action_export_profiles">Экспорт профилей в файл</string>
+    <string name="action_import_profiles">Импорт профилей из файла</string>
+    <string name="backup_exported">Файл резервной копии сохранён</string>
+    <string name="backup_imported">Восстановлено профилей: %1$d</string>
+    <string name="backup_error_format">Это не файл резервной копии Arena Mobile</string>
+    <string name="backup_error_io">Не удалось прочитать или записать файл</string>
+
+    <string name="section_required">Этот раздел отключить нельзя</string>
+    <string name="action_save">Сохранить</string>
+    <!-- Разделы профиля -->
+    <string name="action_choose_sections">Разделы Arena в меню</string>
+    <string name="dialog_sections_title">Какие разделы показывать</string>
+
+    <!-- Сессия и запуск -->
+    <string name="switch_keep_session">Продлевать сессию</string>
+    <string name="switch_keep_session_hint">WebView не сохраняет cookies сессии сам: включите, чтобы вход в Arena переживал перезапуск приложения</string>
+    <string name="switch_open_last">Открывать сразу последний профиль</string>
+    <string name="session_lost_hint">Вход не восстановился. Меню → «Диагностика подключения» покажет причину</string>
+
+    <!-- Ярлыки -->
+    <string name="shortcut_new_chat">Новый чат</string>
+    <string name="shortcut_new_chat_long">Новый чат в «%1$s»</string>
+    <string name="shortcut_agent">Agent Mode</string>
+    <string name="shortcut_agent_long">Agent Mode в «%1$s»</string>
+
+    <!-- Разделы Arena и GitHub -->
+    <string name="menu_arena_sections">Разделы Arena</string>
+    <string name="menu_arena_chat">Чат</string>
+    <string name="menu_arena_history">Поиск по истории</string>
+    <string name="menu_github_repos">Мои репозитории в GitHub</string>
+    <string name="menu_clear_cache">Очистить кэш</string>
+    <string name="dialog_clear_cache_title">Очистить кэш профиля?</string>
+    <string name="dialog_clear_cache_message">Кэш страниц будет удалён, вход в аккаунт сохранится.</string>
+    <string name="toast_cache_cleared">Кэш очищен</string>
+    <string name="sheet_edit_data_size">Данные профиля: %1$s</string>
+
+    <!-- Тема -->
+    <string name="label_theme">Тема оформления</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+
+    <!-- Обновление приложения -->
+    <string name="action_check_update">Проверить обновление</string>
+    <string name="update_available_title">Доступна версия %1$s</string>
+    <string name="update_available_message">Установлено: %1$s (сборка %2$d)\nДоступно: сборка %3$d (%4$s)\n\nОбновление установится поверх текущего приложения — профили, сессии и подключение GitHub сохранятся.</string>
+    <string name="update_download">Скачать и установить</string>
+    <string name="update_open_github">Открыть на GitHub</string>
+    <string name="update_download_started">Загрузка обновления началась — установщик откроется автоматически</string>
+    <string name="update_download_failed">Не удалось скачать обновление</string>
+    <string name="update_check_failed">Не удалось проверить обновления</string>
+    <string name="update_latest">Установлена последняя версия</string>
+
+    <!-- Ярлыки приложения -->
+    <string name="shortcut_continue">Продолжить</string>
+    <string name="shortcut_continue_long">Продолжить в «%1$s»</string>
+    <string name="shortcut_profile_long">Открыть профиль «%1$s»</string>
+
+    <!-- Поделиться в Arena -->
+    <string name="shared_text_pasted">Текст подставлен в поле ввода</string>
+    <string name="shared_text_copied">Текст скопирован — вставьте его в поле ввода</string>
+
+    <!-- Время и размер данных -->
+    <string name="time_now">только что</string>
+    <string name="time_minutes_ago">%1$d мин назад</string>
+    <string name="time_hours_ago">%1$d ч назад</string>
+    <string name="time_yesterday">вчера</string>
+    <string name="size_bytes">%1$d Б</string>
+    <string name="size_kb">%1$.0f КБ</string>
+    <string name="size_mb">%1$.1f МБ</string>
+    <string name="size_gb">%1$.2f ГБ</string>
+
+    <!-- Главный экран -->
+    <string name="profiles_subtitle">Выберите профиль аккаунта</string>
+    <string name="profile_default_name">Профиль %1$d</string>
+    <string name="profile_account_unknown">Аккаунт не указан</string>
+    <string name="profile_card_open">Войти</string>
+    <string name="profile_card_menu">Меню профиля</string>
+    <string name="fab_continue">Продолжить</string>
+    <string name="hint_isolation_title">Изолированные сессии</string>
+    <string name="hint_isolation_body">Каждый профиль хранит свои cookies, localStorage и кэш (папка app_webview_&lt;id&gt;). Переключение аккаунтов не смешивает логины — вы остаётесь в системе сразу под всеми аккаунтами.</string>
+    <string name="github_hint_title">GitHub в Agent Mode</string>
+    <string name="github_hint_body">Откройте любой профиль → arena.ai/agent → включите GitHub Connector, чтобы авторизовать репозитории, не выходя из приложения.</string>
+
+    <!-- Тулбар и меню -->
+    <string name="menu_profiles">Профили…</string>
+    <string name="menu_refresh">Обновить</string>
+    <string name="menu_arena_home">Главная Arena</string>
+    <string name="menu_agent_github">Agent Mode / GitHub</string>
+    <string name="menu_leaderboard">Рейтинг моделей</string>
+    <string name="menu_desktop">Версия для ПК</string>
+    <string name="menu_scroll_top">Наверх страницы</string>
+    <string name="menu_share">Поделиться ссылкой</string>
+    <string name="menu_copy_url">Скопировать ссылку</string>
+    <string name="menu_open_browser">Открыть в браузере</string>
+    <string name="menu_profile_settings">Настройки профиля</string>
+    <string name="menu_app_settings">Настройки</string>
+    <string name="menu_about">О приложении</string>
+
+    <!-- Переключение профилей -->
+    <string name="sheet_profiles_title">Переключить профиль</string>
+    <string name="sheet_profiles_hint">Аккаунты живут в отдельных процессах WebView</string>
+    <string name="sheet_manage">Управлять профилями</string>
+
+    <!-- Настройки профиля -->
+    <string name="sheet_edit_title">Настройки профиля</string>
+    <string name="sheet_edit_hint">Папка данных: app_webview_%1$s</string>
+    <string name="field_name">Название профиля</string>
+    <string name="field_account">Аккаунт Arena (email или ник)</string>
+    <string name="field_github">GitHub-логин</string>
+    <string name="label_color">Цвет профиля</string>
+    <string name="switch_desktop">Версия для ПК</string>
+    <string name="switch_desktop_hint">Пригодится для панели diff в Agent Mode</string>
+    <string name="switch_compat">Режим совместимости входа</string>
+    <string name="switch_compat_hint">Включите, если Google-вход не открывается в WebView</string>
+    <string name="switch_keep_on">Не выключать экран</string>
+    <string name="action_reset_profile">Выйти и стереть данные профиля</string>
+    <string name="dialog_reset_title">Стереть данные профиля?</string>
+    <string name="dialog_reset_message">Cookies, localStorage и кэш этого профиля будут удалены. Остальные профили не затрагиваются.</string>
+    <string name="action_reset">Стереть</string>
+    <string name="action_cancel">Отмена</string>
+
+    <!-- Настройки приложения -->
+    <string name="sheet_settings_title">Настройки</string>
+    <string name="switch_pinch_zoom">Масштаб двумя пальцами</string>
+    <string name="switch_pinch_zoom_hint">Включите, если нужно приближать интерфейс</string>
+    <string name="switch_pull_refresh">Обновление свайпом вниз</string>
+    <string name="switch_pull_refresh_hint">Выключено по умолчанию: на страницах с собственной областью прокрутки жест забирает касания у страницы. Обновить можно кнопкой ↻ в шапке.</string>
+    <string name="action_reset_all">Стереть все профили</string>
+    <string name="dialog_reset_all_title">Стереть все профили?</string>
+    <string name="dialog_reset_all_message">Все сессии Arena и подключения GitHub, сохранённые в приложении, будут удалены.</string>
+
+    <!-- О приложении -->
+    <string name="about_title">О приложении</string>
+    <string name="about_message">Arena Mobile — независимая WebView-оболочка для arena.ai: быстрое переключение аккаунтов, подключение GitHub в Agent Mode и режим для ПК.\n\nПриложение обновляет себя само из GitHub Releases и принимает текст через «Поделиться» из других приложений.\n\nНе является официальным приложением Arena. Данные не покидают устройство — внутри нет аналитики и сторонних SDK.</string>
+    <string name="about_version">Версия %1$s (сборка %2$d)</string>
+    <string name="link_leaderboard">Рейтинг моделей</string>
+    <string name="link_help">Справка Arena</string>
+
+    <!-- Уведомления и состояния -->
+    <string name="toast_saved">Сохранено</string>
+    <string name="toast_reset_done">Данные профиля удалены</string>
+    <string name="toast_url_copied">Ссылка скопирована</string>
+    <string name="toast_download_started">Загрузка началась</string>
+    <string name="toast_download_failed">Не удалось скачать файл</string>
+    <string name="toast_no_app">Нет приложения для этой ссылки</string>
+    <string name="error_title">Не удалось загрузить страницу</string>
+    <string name="error_message_offline">Проверьте интернет-соединение и попробуйте снова.</string>
+    <string name="action_retry">Повторить</string>
+    <string name="github_connected">GitHub: %1$s</string>
+    <string name="github_not_connected">GitHub не подключён</string>
+    <string name="perm_needed">Для этого действия нужно разрешение</string>
+</resources>
