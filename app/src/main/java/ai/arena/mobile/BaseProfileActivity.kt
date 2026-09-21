@@ -182,7 +182,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         if (!contentStarted) return
         try {
             SessionKeeper.persistCurrentProfile(
-                context = this,
+                ctx = this,
                 profileId = profileId,
                 keepSession = SettingsStore.read(this).keepSession,
             )
