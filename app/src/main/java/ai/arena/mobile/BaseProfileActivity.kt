@@ -67,6 +67,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var restoredUrl: String? = null
     private var pendingPermissionRequest: PermissionRequest? = null
     private var contentStarted = false
+    private var sessionWarningChecked = false
 
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -127,7 +128,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         setupRail()
         attachHeaderSwipe()
         restoreOrLoad(intent)
-        warnIfSessionLost()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -135,18 +135,19 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         setIntent(intent)
         pendingSharedText = intent.getStringExtra(ProfileRouter.EXTRA_SHARED_TEXT)?.takeIf { it.isNotBlank() }
         val url = intent.getStringExtra(ProfileRouter.EXTRA_URL)
-        if (!url.isNullOrBlank()) {
-            loadUrl(url)
-        } else if (pendingSharedText != null) {
-            webView?.reload()
+        when {
+            !url.isNullOrBlank() -> loadUrl(url)
+            intent.getBooleanExtra(ProfileRouter.EXTRA_AUTO_LOGIN, false) -> loadArenaForAutoLogin()
+            pendingSharedText != null -> webView?.reload()
         }
     }
 
     override fun onResume() {
         super.onResume()
         if (!contentStarted) return
-        // Возврат в приложение после долгого фона: спрашиваем подтверждение снова
-        appLockGate.ensure { }
+        // Возврат в приложение после долгого фона: спрашиваем подтверждение снова.
+        // Не затираем action, который создаёт WebView после разблокировки.
+        appLockGate.ensureUnlocked()
 
         val fresh = ProfileStore.get(this, profileId)
         val previous = profile
@@ -162,18 +163,32 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     }
 
     /**
-     * При сворачивании сохраняем cookies на диск: WebView пишет их с задержкой,
-     * а процесс профиля Android может убить сразу — тогда вход теряется.
+     * WebView пишет cookies на диск с задержкой. Сохраняем их уже в onPause,
+     * то есть до перехода в другой профиль или в фон, а onStop оставляем как
+     * последний повторный барьер перед убийством процесса.
      */
+    override fun onPause() {
+        persistSessionBeforeLeaving()
+        super.onPause()
+    }
+
     override fun onStop() {
-        if (contentStarted) {
-            SessionKeeper.flush()
-            if (SettingsStore.read(this).keepSession) {
-                SessionKeeper.persistAuthCookies()
-            }
-            SessionKeeper.saveSnapshot(this, profileId)
-        }
+        persistSessionBeforeLeaving()
         super.onStop()
+    }
+
+    /** Вызывается роутером до запуска другого профильного процесса. */
+    internal fun persistSessionBeforeLeaving() {
+        if (!contentStarted) return
+        try {
+            SessionKeeper.persistCurrentProfile(
+                context = this,
+                profileId = profileId,
+                keepSession = SettingsStore.read(this).keepSession,
+            )
+        } catch (t: Throwable) {
+            // Сохранение входа не должно закрывать профиль при ошибке WebView.
+        }
     }
 
     /**
@@ -210,8 +225,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     }
 
     override fun onDestroy() {
+        persistSessionBeforeLeaving()
         try {
-            SessionKeeper.flush()
             binding.webView.removeJavascriptInterface(WebBridge.JS_NAME)
             (binding.webView.parent as? ViewGroup)?.removeView(binding.webView)
             binding.webView.destroy()
@@ -428,9 +443,11 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     /** Продолжаем с сохранённого состояния, если экран был пересоздан. */
     private fun restoreOrLoad(intent: Intent?) {
+        val explicitNavigation = !intent?.getStringExtra(ProfileRouter.EXTRA_URL).isNullOrBlank() ||
+            intent?.getBooleanExtra(ProfileRouter.EXTRA_AUTO_LOGIN, false) == true
         val restored = restoreBundle
         restoreBundle = null
-        if (restored != null) {
+        if (!explicitNavigation && restored != null) {
             try {
                 if (webView?.restoreState(restored) != null) return
             } catch (t: Throwable) {
@@ -442,16 +459,28 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     private fun loadInitialUrl(intent: Intent?) {
         val extra = intent?.getStringExtra(ProfileRouter.EXTRA_URL)
+        val autoLogin = intent?.getBooleanExtra(ProfileRouter.EXTRA_AUTO_LOGIN, false) == true
         val saved = restoredUrl?.takeIf { it.startsWith("http") }
         restoredUrl = null
         val remembered = profile?.lastUrl?.takeIf { it.startsWith("http") }
         val target = when {
             !extra.isNullOrBlank() -> extra
+            autoLogin -> Links.HOME
             !saved.isNullOrBlank() -> saved
             !remembered.isNullOrBlank() -> remembered
             else -> Links.HOME
         }
         loadUrl(target)
+    }
+
+    /**
+     * Переключение профилей всегда возвращает в Arena. WebView этого профиля
+     * отправит собственные cookies, поэтому сайт автоматически восстановит
+     * именно его аккаунт, не затрагивая соседние профили.
+     */
+    private fun loadArenaForAutoLogin() {
+        if (!contentStarted || webView == null) return
+        loadUrl(Links.HOME)
     }
 
     private fun loadUrl(url: String) {
@@ -495,12 +524,21 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             injectPageHelpers(view, current)
             pendingSharedText?.let { injectSharedText(view, it) }
 
-            // Страница Arena загрузилась: фиксируем cookies, чтобы вход не потерялся
+            // Страница Arena загрузилась: фиксируем cookies, чтобы вход не потерялся.
+            // Проверку потери сессии откладываем: CookieManager может вернуть
+            // восстановленные cookies только после первого сетевого запроса.
             if (Diagnostics.hostOf(current)?.endsWith("arena.ai") == true) {
                 SessionKeeper.flush()
                 if (SettingsStore.read(this@BaseProfileActivity).keepSession) {
                     SessionKeeper.persistAuthCookies()
                 }
+                view.postDelayed({
+                    if (!isFinishing && !isDestroyed && webView === view &&
+                        Diagnostics.hostOf(view.url)?.endsWith("arena.ai") == true
+                    ) {
+                        warnIfSessionLost()
+                    }
+                }, SESSION_CHECK_DELAY_MS)
             }
         }
 
@@ -741,6 +779,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
      * пережил перезапуск. Сообщаем один раз, дальше подсказка не повторяется.
      */
     private fun warnIfSessionLost() {
+        if (sessionWarningChecked) return
+        sessionWarningChecked = true
         if (!SettingsStore.read(this).keepSession) return
         val diff = SessionKeeper.diffWithSnapshot(this, profileId)
         if (!diff.hasPrevious || !diff.lostAuth) return
@@ -970,5 +1010,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     companion object {
         private const val STATE_WEBVIEW = "profile_webview_state"
         private const val STATE_URL = "profile_webview_url"
+        private const val SESSION_CHECK_DELAY_MS = 350L
     }
 }

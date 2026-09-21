@@ -128,6 +128,22 @@ object SessionKeeper {
         return count
     }
 
+    /**
+     * Полный барьер перед переключением профиля или остановкой процесса.
+     * CookieManager принадлежит текущему WebView-процессу, поэтому этот метод
+     * обязательно вызывается до запуска Activity другого профиля.
+     */
+    fun persistCurrentProfile(ctx: Context, profileId: String, keepSession: Boolean): Int {
+        flush()
+        val persisted = if (keepSession) persistAuthCookies() else 0
+        // persistAuthCookies() уже делает flush(), но повторный вызов нужен и
+        // для режима, где продление сессии отключено.
+        flush()
+        saveSnapshot(ctx, profileId)
+        flush()
+        return persisted
+    }
+
     // ------------------------------------------------------------- снимок
 
     private fun snapshotFile(ctx: Context, profileId: String) =

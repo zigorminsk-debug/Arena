@@ -87,21 +87,37 @@ class AppLockGate(private val activity: AppCompatActivity) {
 
     /** Выполняет действие, если приложение разблокировано, иначе просит подтверждение. */
     fun ensure(action: () -> Unit) {
+        ensureInternal(action)
+    }
+
+    /**
+     * Проверяет блокировку без замены действия, ожидающего завершения запроса.
+     *
+     * onResume() вызывается во время показа BiometricPrompt. Раньше вызов
+     * `ensure { }` из onResume мог затереть реальное действие запуска профиля,
+     * и после успешной разблокировки WebView так и не создавался.
+     */
+    fun ensureUnlocked() {
+        ensureInternal(null)
+    }
+
+    private fun ensureInternal(action: (() -> Unit)?) {
         if (!AppLock.isEnabled(activity)) {
-            action()
+            action?.invoke()
             return
         }
 
         if (AppLock.isUnlocked(activity)) {
             // Пользователь работает с приложением — продлеваем окно доверия
             AppLock.markUnlocked(activity)
-            action()
+            action?.invoke()
             return
         }
 
         if (prompting) {
-            // Запрос уже на экране: выполним действие, когда подтвердят
-            pendingAction = action
+            // Уже показан запрос. Пустая проверка из onResume не должна
+            // затирать действие, отложенное до успешной разблокировки.
+            if (action != null) pendingAction = action
             return
         }
 
@@ -134,14 +150,18 @@ class AppLockGate(private val activity: AppCompatActivity) {
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    // После любой ошибки prompting должен сброситься. Иначе
+                    // следующий onResume считает, что диалог всё ещё открыт,
+                    // и автозапуск профиля навсегда останется в ожидании.
+                    prompting = false
                     if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
                         errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
                         errorCode == BiometricPrompt.ERROR_CANCELED
                     ) {
                         cancel(activity)
                     }
-                    // Прочие ошибки (например, временная блокировка) оставляем
-                    // пользователю: он может попробовать ещё раз, перезапустив экран
+                    // При временной блокировке оставляем pendingAction: новый
+                    // onResume сможет показать запрос ещё раз.
                 }
 
                 override fun onAuthenticationFailed() {

@@ -3,6 +3,7 @@ package ai.arena.mobile
 import android.content.Context
 import org.json.JSONArray
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Хранилище профилей в JSON-файле. Файл читается заново при каждом обращении,
@@ -23,7 +24,49 @@ object ProfileStore {
     private fun wipeFlag(ctx: Context, id: String) = File(ctx.filesDir, "wipe_$id")
 
     @Synchronized
-    fun all(ctx: Context): MutableList<Profile> {
+    fun all(ctx: Context): MutableList<Profile> = withStoreLock(ctx) {
+        allLocked(ctx)
+    }
+
+    @Synchronized
+    fun get(ctx: Context, id: String): Profile = withStoreLock(ctx) {
+        val list = allLocked(ctx)
+        list.firstOrNull { it.id == id } ?: list.first()
+    }
+
+    @Synchronized
+    fun update(ctx: Context, profile: Profile) = withStoreLock(ctx) {
+        val list = allLocked(ctx)
+        val index = list.indexOfFirst { it.id == profile.id }
+        if (index >= 0) list[index] = profile else list.add(profile)
+        writeLocked(ctx, list)
+    }
+
+    /** Запоминает последнюю страницу профиля, чтобы возвращаться «где остановился». */
+    @Synchronized
+    fun markUsed(ctx: Context, id: String, url: String?) = withStoreLock(ctx) {
+        val list = allLocked(ctx)
+        val index = list.indexOfFirst { it.id == id }
+        if (index < 0) return@withStoreLock
+        val profile = list[index]
+        if (url != null && url == profile.lastUrl && System.currentTimeMillis() - profile.lastUsed < 5_000) {
+            return@withStoreLock
+        }
+        list[index] = profile.copy(
+            lastUsed = System.currentTimeMillis(),
+            lastUrl = url ?: profile.lastUrl,
+        )
+        writeLocked(ctx, list)
+    }
+
+    @Synchronized
+    fun lastUsed(ctx: Context): Profile = withStoreLock(ctx) {
+        val list = allLocked(ctx)
+        list.filter { it.lastUsed > 0L }.maxByOrNull { it.lastUsed } ?: list.first()
+    }
+
+    /** Читает профильный файл и при необходимости добавляет отсутствующие слоты. */
+    private fun allLocked(ctx: Context): MutableList<Profile> {
         val file = storeFile(ctx)
         val list = mutableListOf<Profile>()
         if (file.exists()) {
@@ -54,43 +97,35 @@ object ProfileStore {
         }
 
         list.sortBy { profile -> IDS.indexOf(profile.id).let { if (it < 0) 99 else it } }
-        if (changed) write(ctx, list)
+        if (changed) writeLocked(ctx, list)
         return list
     }
 
-    @Synchronized
-    fun get(ctx: Context, id: String): Profile {
-        val list = all(ctx)
-        return list.firstOrNull { it.id == id } ?: list.first()
-    }
-
-    @Synchronized
-    fun update(ctx: Context, profile: Profile) {
-        val list = all(ctx)
-        val index = list.indexOfFirst { it.id == profile.id }
-        if (index >= 0) list[index] = profile else list.add(profile)
-        write(ctx, list)
-    }
-
-    /** Запоминает последнюю страницу профиля, чтобы возвращаться «где остановился». */
-    @Synchronized
-    fun markUsed(ctx: Context, id: String, url: String?) {
-        val list = all(ctx)
-        val index = list.indexOfFirst { it.id == id }
-        if (index < 0) return
-        val profile = list[index]
-        if (url != null && url == profile.lastUrl && System.currentTimeMillis() - profile.lastUsed < 5_000) return
-        list[index] = profile.copy(
-            lastUsed = System.currentTimeMillis(),
-            lastUrl = url ?: profile.lastUrl,
-        )
-        write(ctx, list)
-    }
-
-    @Synchronized
-    fun lastUsed(ctx: Context): Profile {
-        val list = all(ctx)
-        return list.filter { it.lastUsed > 0L }.maxByOrNull { it.lastUsed } ?: list.first()
+    /**
+     * @Synchronized защищает только потоки одного процесса. Профили живут в
+     * разных Android-процессах, поэтому для profiles.json нужен настоящий
+     * межпроцессный lock — иначе markUsed одного профиля мог затереть настройки
+     * другого, записанные почти одновременно.
+     */
+    private fun <T> withStoreLock(ctx: Context, block: () -> T): T {
+        val lockFile = File(ctx.filesDir, "profiles.lock")
+        return try {
+            RandomAccessFile(lockFile, "rw").use { random ->
+                val fileLock = random.channel.lock()
+                try {
+                    block()
+                } finally {
+                    fileLock.release()
+                }
+            }
+        } catch (_: java.nio.channels.OverlappingFileLockException) {
+            // Повторный lock в одном JVM невозможен; публичные методы не
+            // вкладываются, поэтому здесь безопасен локальный fallback.
+            block()
+        } catch (_: java.io.IOException) {
+            // Не превращаем кратковременную ошибку файла в падение profile process.
+            block()
+        }
     }
 
     // ---------- очистка данных профиля ----------
@@ -136,7 +171,8 @@ object ProfileStore {
                 }
             }
             deleteRecursively(File(ctx.cacheDir, "webview_$id"))
-            deleteRecursively(File(ctx.cacheDir, "org.chromium.android_webview"))
+            // org.chromium.android_webview — общий каталог WebView, его
+            // удаление при сбросе одного профиля ломает остальные профили.
             deleteRecursively(File(ctx.filesDir, "webview_$id"))
         } catch (t: Throwable) {
             // ignore
@@ -238,7 +274,7 @@ object ProfileStore {
         }
     }
 
-    private fun write(ctx: Context, list: List<Profile>) {
+    private fun writeLocked(ctx: Context, list: List<Profile>) {
         try {
             val array = JSONArray()
             list.forEach { array.put(it.toJson()) }
