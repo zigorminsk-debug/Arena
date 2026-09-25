@@ -1003,10 +1003,77 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     // --------------------------------------------------------------- GitHub
 
+    /**
+     * Некоторые страницы успевают вызвать URL.revokeObjectURL сразу после
+     * клика. Перехватываем такой клик в capture-фазе и читаем blob до revoke,
+     * не передавая blob:// в DownloadManager.
+     */
+    private fun injectBlobDownloadHelper(view: WebView) {
+        val script = """
+            (function() {
+                if (window.__arenaBlobDownloadHook) return;
+                window.__arenaBlobDownloadHook = true;
+                if (window.URL && window.URL.revokeObjectURL && !window.__arenaBlobRevokeHook) {
+                    var originalRevokeObjectURL = window.URL.revokeObjectURL.bind(window.URL);
+                    window.URL.revokeObjectURL = function(url) {
+                        if (typeof url === "string" && /^blob:/i.test(url)) {
+                            setTimeout(function() { originalRevokeObjectURL(url); }, 10000);
+                        } else {
+                            originalRevokeObjectURL(url);
+                        }
+                    };
+                    window.__arenaBlobRevokeHook = true;
+                }
+                document.addEventListener("click", function(event) {
+                    var node = event.target;
+                    var anchor = node && node.closest ? node.closest("a") : null;
+                    if (!anchor) return;
+                    var href = anchor.href || anchor.getAttribute("href") || "";
+                    if (!/^(blob:|data:)/i.test(href)) return;
+                    if (anchor.getAttribute("data-arena-blob-handled") === "1") return;
+                    anchor.setAttribute("data-arena-blob-handled", "1");
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    var fail = function() {
+                        anchor.removeAttribute("data-arena-blob-handled");
+                        if (window.ArenaAndroid && window.ArenaAndroid.reportBlobDownloadFailed) {
+                            window.ArenaAndroid.reportBlobDownloadFailed();
+                        }
+                    };
+                    fetch(href).then(function(response) {
+                        if (!response.ok) throw new Error("blob response failed");
+                        return response.blob();
+                    }).then(function(blob) {
+                        var reader = new FileReader();
+                        reader.onloadend = function() {
+                            if (reader.result && window.ArenaAndroid && window.ArenaAndroid.reportBlobDownload) {
+                                window.ArenaAndroid.reportBlobDownload(
+                                    String(reader.result),
+                                    anchor.getAttribute("download") || "download",
+                                    blob.type || "application/octet-stream"
+                                );
+                            } else {
+                                fail();
+                            }
+                        };
+                        reader.onerror = fail;
+                        reader.readAsDataURL(blob);
+                    }).catch(fail);
+                }, true);
+            })();
+        """.trimIndent()
+        try {
+            view.evaluateJavascript(script, null)
+        } catch (_: Throwable) {
+            // DownloadListener remains as a fallback.
+        }
+    }
+
     /** Навешивает на страницу вспомогательные скрипты: прокрутка и логин GitHub. */
     private fun injectPageHelpers(view: WebView, url: String) {
         Scripts.load(this, Scripts.SCROLL_TRACKER).takeIf { it.isNotEmpty() }
             ?.let { view.evaluateJavascript(it, null) }
+        injectBlobDownloadHelper(view)
 
         val host = Diagnostics.hostOf(url) ?: return
 
