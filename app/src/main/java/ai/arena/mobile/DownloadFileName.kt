@@ -51,6 +51,12 @@ object DownloadFileName {
         return null
     }
 
+    /** Имя, пришедшее из атрибута download у blob-ссылки. */
+    fun resolveSuggestedName(name: String?, mimeType: String?): Result? {
+        if (name.isNullOrBlank()) return resolve(null, null, mimeType)
+        return resultWithExtension(name, extensionFromMime(mimeType))
+    }
+
     fun isGenericMime(mimeType: String?): Boolean {
         val mime = mimeType?.substringBefore(';')?.trim()?.lowercase().orEmpty()
         return mime.isEmpty() || mime == "application/octet-stream" ||

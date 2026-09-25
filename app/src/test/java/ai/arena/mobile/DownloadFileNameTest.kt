@@ -54,6 +54,21 @@ class DownloadFileNameTest {
     }
 
     @Test
+    fun `suggested blob name gets extension from mime type`() {
+        val result = DownloadFileName.resolveSuggestedName("report", "text/plain")
+
+        assertEquals("report.txt", result?.name)
+        assertTrue(result?.hasExtension == true)
+    }
+
+    @Test
+    fun `suggested blob name is sanitized`() {
+        val result = DownloadFileName.resolveSuggestedName("../report?.pdf", "application/pdf")
+
+        assertEquals("report_.pdf", result?.name)
+    }
+
+    @Test
     fun `generic mime type is detected`() {
         assertTrue(DownloadFileName.isGenericMime("application/octet-stream"))
         assertTrue(DownloadFileName.isGenericMime(null))

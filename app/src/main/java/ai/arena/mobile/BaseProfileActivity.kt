@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,6 +15,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.Menu
@@ -46,6 +49,8 @@ import androidx.core.view.isVisible
 import ai.arena.mobile.databinding.ActivityProfileBinding
 import kotlin.math.abs
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -70,11 +75,18 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var contentStarted = false
     private var sessionWarningChecked = false
     private var pendingDownload: PendingDownload? = null
+    private var pendingBlobDownload: BlobDownload? = null
 
     private data class PendingDownload(
         val url: String,
         val userAgent: String?,
         val contentDisposition: String?,
+        val mimeType: String?,
+    )
+
+    private data class BlobDownload(
+        val dataUrl: String,
+        val suggestedName: String?,
         val mimeType: String?,
     )
 
@@ -97,17 +109,21 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private val storagePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val pending = pendingDownload
+            val pendingBlob = pendingBlobDownload
             pendingDownload = null
-            if (pending == null) return@registerForActivityResult
-            if (granted) {
-                startDownload(
-                    pending.url,
-                    pending.userAgent,
-                    pending.contentDisposition,
-                    pending.mimeType,
-                )
-            } else {
-                toast(getString(R.string.toast_download_failed))
+            pendingBlobDownload = null
+            when {
+                pending != null && granted -> {
+                    startDownload(
+                        pending.url,
+                        pending.userAgent,
+                        pending.contentDisposition,
+                        pending.mimeType,
+                    )
+                }
+
+                pendingBlob != null && granted -> saveBlobDownload(pendingBlob)
+                pending != null || pendingBlob != null -> toast(getString(R.string.toast_download_failed))
             }
         }
 
@@ -702,6 +718,11 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     }
 
     private fun startDownload(url: String, userAgent: String?, contentDisposition: String?, mimeType: String?) {
+        if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
+            requestBlobDownload(url, contentDisposition, mimeType)
+            return
+        }
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             !hasPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         ) {
@@ -736,6 +757,167 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 enqueueDownload(url, userAgent, fileName, effectiveMime)
             }
         }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * WebView не может передать blob:// в DownloadManager. Читаем blob внутри
+     * той же страницы и возвращаем его в приложение как data:...;base64,... .
+     */
+    private fun requestBlobDownload(
+        url: String,
+        contentDisposition: String?,
+        mimeType: String?,
+    ) {
+        val view = webView
+        if (view == null) {
+            onBlobDownloadFailed()
+            return
+        }
+
+        val suggestedName = DownloadFileName.resolve(null, contentDisposition, mimeType)?.name ?: "download"
+        val requestedMime = mimeType?.substringBefore(';')?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: "application/octet-stream"
+        val urlLiteral = JSONObject.quote(url)
+        val nameLiteral = JSONObject.quote(suggestedName)
+        val mimeLiteral = JSONObject.quote(requestedMime)
+        val script = """
+            (function() {
+                var fail = function() {
+                    if (window.ArenaAndroid && window.ArenaAndroid.reportBlobDownloadFailed) {
+                        window.ArenaAndroid.reportBlobDownloadFailed();
+                    }
+                };
+                fetch($urlLiteral).then(function(response) {
+                    if (!response.ok) throw new Error("blob response failed");
+                    return response.blob();
+                }).then(function(blob) {
+                    var reader = new FileReader();
+                    reader.onloadend = function() {
+                        if (reader.result && window.ArenaAndroid && window.ArenaAndroid.reportBlobDownload) {
+                            window.ArenaAndroid.reportBlobDownload(
+                                String(reader.result),
+                                $nameLiteral,
+                                blob.type || $mimeLiteral
+                            );
+                        } else {
+                            fail();
+                        }
+                    };
+                    reader.onerror = fail;
+                    reader.readAsDataURL(blob);
+                }).catch(fail);
+            })();
+        """.trimIndent()
+
+        try {
+            view.evaluateJavascript(script, null)
+        } catch (_: Throwable) {
+            onBlobDownloadFailed()
+        }
+    }
+
+    override fun onBlobDownload(dataUrl: String, suggestedName: String?, mimeType: String?) {
+        if (dataUrl.length > MAX_BLOB_DATA_URL_LENGTH) {
+            onBlobDownloadFailed()
+            return
+        }
+
+        val pending = BlobDownload(dataUrl, suggestedName, mimeType)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            !hasPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        ) {
+            pendingBlobDownload = pending
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                try {
+                    storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                } catch (_: Throwable) {
+                    pendingBlobDownload = null
+                    toast(getString(R.string.toast_download_failed))
+                }
+            }
+        } else {
+            saveBlobDownload(pending)
+        }
+    }
+
+    override fun onBlobDownloadFailed() {
+        runOnUiThread { toast(getString(R.string.toast_download_failed)) }
+    }
+
+    private fun saveBlobDownload(download: BlobDownload) {
+        Thread {
+            try {
+                val comma = download.dataUrl.indexOf(',')
+                if (comma <= 5) throw IllegalArgumentException("invalid data URL")
+                val metadata = download.dataUrl.substring(5, comma)
+                if (!metadata.contains(";base64", ignoreCase = true)) {
+                    throw IllegalArgumentException("blob is not base64 encoded")
+                }
+                val bytes = Base64.decode(download.dataUrl.substring(comma + 1), Base64.DEFAULT)
+                if (bytes.isEmpty()) throw IllegalArgumentException("empty blob")
+
+                val mime = download.mimeType?.substringBefore(';')?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: metadata.substringBefore(';').trim().takeIf { it.isNotBlank() }
+                    ?: "application/octet-stream"
+                val fileName = DownloadFileName.resolveSuggestedName(download.suggestedName, mime)?.name
+                    ?: "download"
+                saveBlobToDownloads(fileName, mime, bytes)
+                runOnUiThread { toast(getString(R.string.toast_download_started)) }
+            } catch (_: Throwable) {
+                runOnUiThread { toast(getString(R.string.toast_download_failed)) }
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private fun saveBlobToDownloads(fileName: String, mimeType: String, bytes: ByteArray) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("cannot create Downloads entry")
+            try {
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: throw IllegalStateException("cannot open Downloads entry")
+                val completed = ContentValues().apply {
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                }
+                contentResolver.update(uri, completed, null, null)
+            } catch (t: Throwable) {
+                contentResolver.delete(uri, null, null)
+                throw t
+            }
+            return
+        }
+
+        @Suppress("DEPRECATION")
+        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw IllegalStateException("cannot create Downloads directory")
+        }
+        val target = nextDownloadFile(directory, fileName)
+        FileOutputStream(target).use { it.write(bytes) }
+    }
+
+    private fun nextDownloadFile(directory: File, fileName: String): File {
+        var candidate = File(directory, fileName)
+        if (!candidate.exists()) return candidate
+
+        val dot = fileName.lastIndexOf('.')
+        val stem = if (dot > 0) fileName.substring(0, dot) else fileName
+        val extension = if (dot > 0) fileName.substring(dot) else ""
+        var number = 1
+        while (candidate.exists()) {
+            candidate = File(directory, "$stem ($number)$extension")
+            number++
+        }
+        return candidate
     }
 
     private data class DownloadHeaders(
@@ -1135,5 +1317,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         private const val STATE_URL = "profile_webview_url"
         private const val SESSION_CHECK_DELAY_MS = 350L
         private const val DOWNLOAD_PROBE_TIMEOUT_MS = 5_000
+        private const val MAX_BLOB_DATA_URL_LENGTH = 128 * 1024 * 1024
     }
 }

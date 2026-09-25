@@ -4,8 +4,8 @@ import android.webkit.JavascriptInterface
 
 /**
  * Минимальный мост «страница → приложение». Наружу отдаются только безопасные
- * методы: логин GitHub, положение прокрутки и результат подстановки текста из
- * «Поделиться». Скрипты живут в assets/js (см. Scripts).
+ * методы: логин GitHub, положение прокрутки, результат подстановки текста из
+ * «Поделиться» и передача blob-загрузок. Скрипты живут в assets/js (см. Scripts).
  */
 class WebBridge(private val host: Host) {
 
@@ -20,6 +20,12 @@ class WebBridge(private val host: Host) {
 
         /** Черновик восстановлен после перерисовки страницы (например, при повороте). */
         fun onDraftRestored(textRestored: Boolean, filesRestored: Int)
+
+        /** WebView передал содержимое blob://-загрузки в формате data URL. */
+        fun onBlobDownload(dataUrl: String, suggestedName: String?, mimeType: String?)
+
+        /** WebView не смог прочитать blob://-ссылку. */
+        fun onBlobDownloadFailed()
     }
 
     @JavascriptInterface
@@ -44,6 +50,27 @@ class WebBridge(private val host: Host) {
     fun reportDraftRestored(textRestored: Boolean, filesRestored: Int) {
         val files = filesRestored.coerceIn(0, 20)
         host.onDraftRestored(textRestored, files)
+    }
+
+    /**
+     * DownloadManager принимает только http(s), а браузерные приложения часто
+     * создают ссылки на локальный blob://. JS передаёт такой blob как data URL,
+     * после чего Activity сохраняет байты в Downloads.
+     */
+    @JavascriptInterface
+    fun reportBlobDownload(dataUrl: String?, suggestedName: String?, mimeType: String?) {
+        val data = dataUrl?.trim().orEmpty()
+        val comma = data.indexOf(',')
+        if (!data.startsWith("data:") || comma <= "data:".length || comma == data.lastIndex) {
+            host.onBlobDownloadFailed()
+            return
+        }
+        host.onBlobDownload(data, suggestedName?.trim(), mimeType?.trim())
+    }
+
+    @JavascriptInterface
+    fun reportBlobDownloadFailed() {
+        host.onBlobDownloadFailed()
     }
 
     @JavascriptInterface
