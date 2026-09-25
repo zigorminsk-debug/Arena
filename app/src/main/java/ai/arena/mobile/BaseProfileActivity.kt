@@ -129,6 +129,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         setupRail()
         attachHeaderSwipe()
         restoreOrLoad(intent)
+        // Ярлык профиля может запускать Activity напрямую, минуя MainActivity.
+        // Поэтому проверка обновлений должна работать и здесь.
+        UpdateChecker.installPendingIfReady(this)
+        UpdateChecker.checkAsync(this, manual = false)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -146,6 +150,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     override fun onResume() {
         super.onResume()
         if (!contentStarted) return
+        UpdateChecker.installPendingIfReady(this)
+        UpdateChecker.checkAsync(this, manual = false)
         // Возврат в приложение после долгого фона: спрашиваем подтверждение снова.
         // Не затираем action, который создаёт WebView после разблокировки.
         appLockGate.ensureUnlocked()

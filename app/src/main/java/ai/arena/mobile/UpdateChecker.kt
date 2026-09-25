@@ -40,8 +40,12 @@ object UpdateChecker {
     private const val KEY_LAST_CHECK = "last_check"
     private const val KEY_DOWNLOAD_ID = "download_id"
 
-    /** Автопроверка не чаще одного раза в 12 часов. */
-    private const val AUTO_CHECK_INTERVAL_MS = 12L * 60L * 60L * 1000L
+    /** Автопроверка не чаще одного раза в час. */
+    private const val AUTO_CHECK_INTERVAL_MS = 60L * 60L * 1000L
+
+    /** Не запускаем два сетевых запроса из MainActivity и profile Activity одновременно. */
+    @Volatile
+    private var checkInProgress = false
 
     private val buildRegex = Regex("""build(\d+)""")
     private val versionRegex = Regex("""(\d+\.\d+(?:\.\d+)*)""")
@@ -101,27 +105,43 @@ object UpdateChecker {
      */
     fun checkAsync(activity: Activity, manual: Boolean) {
         val prefs = prefs(activity)
-        if (!manual) {
-            val last = prefs.getLong(KEY_LAST_CHECK, 0L)
-            if (System.currentTimeMillis() - last < AUTO_CHECK_INTERVAL_MS) return
+        synchronized(this) {
+            if (checkInProgress) return
+            if (!manual) {
+                val last = prefs.getLong(KEY_LAST_CHECK, 0L)
+                if (System.currentTimeMillis() - last < AUTO_CHECK_INTERVAL_MS) return
+            }
+            checkInProgress = true
         }
 
         Thread {
-            val json = fetch(API_URL)
-            val release = json?.let { parseRelease(it) }
-            prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+            try {
+                val json = fetch(API_URL)
+                val release = json?.let { parseRelease(it) }
 
-            activity.runOnUiThread {
-                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
-                when {
-                    release == null ->
-                        if (manual) toast(activity, R.string.update_check_failed)
-
-                    isNewer(release, BuildConfig.VERSION_CODE) ->
-                        showUpdateDialog(activity, release)
-
-                    manual -> toast(activity, R.string.update_latest)
+                if (json != null) {
+                    // Время сохраняем только после ответа GitHub. При сетевой
+                    // ошибке старый timestamp не должен блокировать повторную
+                    // проверку ещё на час.
+                    prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+                } else {
+                    prefs.edit().remove(KEY_LAST_CHECK).apply()
                 }
+
+                activity.runOnUiThread {
+                    if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                    when {
+                        release == null ->
+                            if (manual) toast(activity, R.string.update_check_failed)
+
+                        isNewer(release, BuildConfig.VERSION_CODE) ->
+                            showUpdateDialog(activity, release)
+
+                        manual -> toast(activity, R.string.update_latest)
+                    }
+                }
+            } finally {
+                checkInProgress = false
             }
         }.apply { isDaemon = true }.start()
     }

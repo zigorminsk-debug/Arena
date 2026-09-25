@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         // Всё, что открывает профили, делаем только после подтверждения личности
         appLockGate.ensure { handleAfterUnlock(intent) }
 
-        // Тихая проверка обновлений (не чаще раза в 12 часов)
+        // Тихая проверка обновлений (не чаще раза в час)
         UpdateChecker.checkAsync(this, manual = false)
     }
 
@@ -72,8 +72,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
-        // Если обновление уже скачалось — предлагаем установить
+        // Если обновление уже скачалось — предлагаем установить.
         UpdateChecker.installPendingIfReady(this)
+        // Проверяем также при возврате из фона: onCreate вызывается не при
+        // каждом запуске приложения, а новая версия могла выйти позже.
+        UpdateChecker.checkAsync(this, manual = false)
         AppShortcuts.syncIfChanged(this)
         // Возврат в приложение после долгого фона: спрашиваем подтверждение снова.
         // Пустая проверка не должна затереть отложенное действие запуска профиля.
