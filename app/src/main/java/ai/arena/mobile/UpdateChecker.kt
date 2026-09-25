@@ -137,7 +137,21 @@ object UpdateChecker {
                         isNewer(release, BuildConfig.VERSION_CODE) ->
                             showUpdateDialog(activity, release)
 
-                        manual -> toast(activity, R.string.update_latest)
+                        manual -> {
+                            val message = if (release.buildNumber < BuildConfig.VERSION_CODE) {
+                                R.string.update_current_newer
+                            } else {
+                                R.string.update_latest
+                            }
+                            toast(
+                                activity,
+                                message,
+                                BuildConfig.VERSION_NAME,
+                                BuildConfig.VERSION_CODE,
+                                release.versionName,
+                                release.buildNumber,
+                            )
+                        }
                     }
                 }
             } finally {
@@ -295,7 +309,8 @@ object UpdateChecker {
         }
     }
 
-    private fun toast(activity: Activity, resId: Int) {
-        Toast.makeText(activity, resId, Toast.LENGTH_LONG).show()
+    private fun toast(activity: Activity, resId: Int, vararg args: Any) {
+        val message = if (args.isEmpty()) activity.getString(resId) else activity.getString(resId, *args)
+        Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     }
 }

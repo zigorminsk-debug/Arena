@@ -79,7 +79,8 @@
     <string name="update_download_started">Update download started — the installer will open automatically</string>
     <string name="update_download_failed">Could not download the update</string>
     <string name="update_check_failed">Could not check for updates</string>
-    <string name="update_latest">You have the latest version</string>
+    <string name="update_latest">Installed: %1$s (build %2$d). Latest published release: %3$s (build %4$d).</string>
+    <string name="update_current_newer">The installed build is newer: %1$s (build %2$d). Latest published release: %3$s (build %4$d).</string>
 
     <!-- Launcher shortcuts -->
     <string name="shortcut_continue">Continue</string>

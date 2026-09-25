@@ -79,7 +79,8 @@
     <string name="update_download_started">Загрузка обновления началась — установщик откроется автоматически</string>
     <string name="update_download_failed">Не удалось скачать обновление</string>
     <string name="update_check_failed">Не удалось проверить обновления</string>
-    <string name="update_latest">Установлена последняя версия</string>
+    <string name="update_latest">Установлено: %1$s (build %2$d). Последний опубликованный релиз: %3$s (build %4$d).</string>
+    <string name="update_current_newer">Установленная сборка новее: %1$s (build %2$d). Последний опубликованный релиз: %3$s (build %4$d).</string>
 
     <!-- Ярлыки приложения -->
     <string name="shortcut_continue">Продолжить</string>
