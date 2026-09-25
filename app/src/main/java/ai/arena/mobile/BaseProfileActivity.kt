@@ -26,7 +26,6 @@ import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
-import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -47,6 +46,8 @@ import androidx.core.view.isVisible
 import ai.arena.mobile.databinding.ActivityProfileBinding
 import kotlin.math.abs
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Экран профиля: один WebView, один процесс, один каталог данных.
@@ -676,10 +677,98 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             openExternally(Uri.parse(url))
             return
         }
+
+        val initial = DownloadFileName.resolve(url, contentDisposition, mimeType)
+        val needsProbe = initial == null ||
+            (DownloadFileName.isGenericMime(mimeType) && initial?.hasExtension != true)
+
+        if (!needsProbe && initial != null) {
+            enqueueDownload(url, userAgent, initial.name, mimeType)
+            return
+        }
+
+        // У API Arena часто нет расширения в URL, а WebView передаёт
+        // application/octet-stream. Сначала читаем только HTTP-заголовки:
+        // Content-Disposition обычно содержит настоящее имя файла.
+        Thread {
+            val headers = probeDownloadHeaders(url, userAgent)
+            val resolved = DownloadFileName.resolve(
+                url = headers?.finalUrl ?: url,
+                contentDisposition = headers?.contentDisposition ?: contentDisposition,
+                mimeType = headers?.mimeType ?: mimeType,
+            )
+            val fileName = resolved?.name ?: initial?.name ?: "arena-download-${System.currentTimeMillis()}"
+            val effectiveMime = headers?.mimeType ?: mimeType
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                enqueueDownload(url, userAgent, fileName, effectiveMime)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private data class DownloadHeaders(
+        val finalUrl: String,
+        val contentDisposition: String?,
+        val mimeType: String?,
+    )
+
+    /** Заголовки проверяем в фоне, чтобы не блокировать UI перед скачиванием. */
+    private fun probeDownloadHeaders(url: String, userAgent: String?): DownloadHeaders? {
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return null
+
+        fun request(method: String): DownloadHeaders? {
+            var connection: HttpURLConnection? = null
+            return try {
+                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    instanceFollowRedirects = true
+                    connectTimeout = DOWNLOAD_PROBE_TIMEOUT_MS
+                    readTimeout = DOWNLOAD_PROBE_TIMEOUT_MS
+                    useCaches = false
+                    setRequestProperty("Accept", "*/*")
+                    if (!userAgent.isNullOrBlank()) setRequestProperty("User-Agent", userAgent)
+                    CookieManager.getInstance().getCookie(url)?.let {
+                        setRequestProperty("Cookie", it)
+                    }
+                    if (method == "GET") setRequestProperty("Range", "bytes=0-0")
+                }
+                val code = connection.responseCode
+                if (code !in 200..399) return null
+                DownloadHeaders(
+                    finalUrl = connection.url?.toString() ?: url,
+                    contentDisposition = connection.getHeaderField("Content-Disposition"),
+                    mimeType = connection.getHeaderField("Content-Type")
+                        ?.substringBefore(';')
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() },
+                )
+            } catch (_: Throwable) {
+                null
+            } finally {
+                try {
+                    connection?.disconnect()
+                } catch (_: Throwable) {
+                    // ignore
+                }
+            }
+        }
+
+        // HEAD не загружает содержимое. Если endpoint его не поддерживает,
+        // пробуем GET с одним байтом диапазона.
+        return request("HEAD") ?: request("GET")
+    }
+
+    private fun enqueueDownload(
+        url: String,
+        userAgent: String?,
+        fileName: String,
+        mimeType: String?,
+    ) {
         try {
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
             val request = DownloadManager.Request(Uri.parse(url))
-            request.setMimeType(mimeType)
+            mimeType?.substringBefore(';')?.trim()?.takeIf { it.isNotBlank() }?.let {
+                request.setMimeType(it)
+            }
             if (!userAgent.isNullOrBlank()) request.addRequestHeader("User-Agent", userAgent)
             CookieManager.getInstance().getCookie(url)?.let { request.addRequestHeader("Cookie", it) }
             request.setTitle(fileName)
@@ -1011,5 +1100,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         private const val STATE_WEBVIEW = "profile_webview_state"
         private const val STATE_URL = "profile_webview_url"
         private const val SESSION_CHECK_DELAY_MS = 350L
+        private const val DOWNLOAD_PROBE_TIMEOUT_MS = 5_000
     }
 }
