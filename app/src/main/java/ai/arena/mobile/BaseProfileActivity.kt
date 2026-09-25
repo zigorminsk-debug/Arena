@@ -1,14 +1,11 @@
 package ai.arena.mobile
 
 import android.annotation.SuppressLint
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -79,8 +76,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var sessionWarningChecked = false
     private var pendingDownload: PendingDownload? = null
     private var pendingBlobDownload: BlobDownload? = null
-    private var downloadReceiverRegistered = false
-    private val regularDownloadIds = mutableSetOf<Long>()
 
     private data class PendingDownload(
         val url: String,
@@ -132,31 +127,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             }
         }
 
-    private val downloadCompleteReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-            if (id <= 0L || !regularDownloadIds.remove(id)) return
-
-            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            var status = DownloadManager.STATUS_FAILED
-            try {
-                manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val index = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                        if (index >= 0) status = cursor.getInt(index)
-                    }
-                }
-            } catch (_: Throwable) {
-                // Treat an unreadable result as a failed download.
-            }
-            if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                toast(getString(R.string.toast_download_saved))
-            } else {
-                toast(getString(R.string.toast_download_failed))
-            }
-        }
-    }
-
     // ---------------------------------------------------------------- lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -164,7 +134,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         // разводит данные профилей по разным каталогам WebView.
         prepareProcessDataDirectory()
         super.onCreate(savedInstanceState)
-        registerDownloadReceiver()
         restoreBundle = savedInstanceState?.getBundle(STATE_WEBVIEW)
         restoredUrl = savedInstanceState?.getString(STATE_URL)
         pendingSharedText = savedInstanceState?.getString(ProfileRouter.EXTRA_SHARED_TEXT)
@@ -175,32 +144,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
         appLockGate = AppLockGate(this)
         appLockGate.ensure { startProfileContent(intent) }
-    }
-
-    private fun registerDownloadReceiver() {
-        if (downloadReceiverRegistered) return
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-            } else {
-                @Suppress("DEPRECATION")
-                registerReceiver(downloadCompleteReceiver, filter)
-            }
-            downloadReceiverRegistered = true
-        } catch (_: Throwable) {
-            // DownloadManager's own notification remains available as a fallback.
-        }
-    }
-
-    private fun unregisterDownloadReceiver() {
-        if (!downloadReceiverRegistered) return
-        try {
-            unregisterReceiver(downloadCompleteReceiver)
-        } catch (_: Throwable) {
-            // ignore
-        }
-        downloadReceiverRegistered = false
     }
 
     private fun prepareProcessDataDirectory() {
@@ -331,7 +274,6 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     override fun onDestroy() {
         persistSessionBeforeLeaving()
-        unregisterDownloadReceiver()
         try {
             binding.webView.removeJavascriptInterface(WebBridge.JS_NAME)
             (binding.webView.parent as? ViewGroup)?.removeView(binding.webView)
@@ -794,7 +736,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             (DownloadFileName.isGenericMime(mimeType) && initial?.hasExtension != true)
 
         if (!needsProbe && initial != null) {
-            enqueueDownload(url, userAgent, initial.name, mimeType)
+            startHttpDownload(url, userAgent, initial.name, mimeType)
             return
         }
 
@@ -812,14 +754,14 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             val effectiveMime = headers?.mimeType ?: mimeType
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                enqueueDownload(url, userAgent, fileName, effectiveMime)
+                startHttpDownload(url, userAgent, fileName, effectiveMime)
             }
         }.apply { isDaemon = true }.start()
     }
 
     /**
-     * WebView не может передать blob:// в DownloadManager. Читаем blob внутри
-     * той же страницы и возвращаем его в приложение как data:...;base64,... .
+     * WebView не может передать blob:// обычному HTTP-загрузчику. Читаем blob
+     * внутри той же страницы и возвращаем его в приложение как data:...;base64,... .
      */
     private fun requestBlobDownload(
         url: String,
@@ -1036,48 +978,31 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         return request("HEAD") ?: request("GET")
     }
 
-    private fun enqueueDownload(
+    private fun startHttpDownload(
         url: String,
         userAgent: String?,
         fileName: String,
         mimeType: String?,
     ) {
-        try {
-            val request = DownloadManager.Request(Uri.parse(url))
-            mimeType?.substringBefore(';')?.trim()?.takeIf { it.isNotBlank() }?.let {
-                request.setMimeType(it)
-            }
-            if (!userAgent.isNullOrBlank()) request.addRequestHeader("User-Agent", userAgent)
-            CookieManager.getInstance().getCookie(url)?.let { request.addRequestHeader("Cookie", it) }
-            request.setTitle(fileName)
-            request.setDescription(getString(R.string.app_name))
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            request.allowScanningByMediaScanner()
-            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val id = manager.enqueue(request)
-            regularDownloadIds.add(id)
-            toast(getString(R.string.toast_download_started))
-        } catch (t: Throwable) {
-            // На части прошивок DownloadManager запрещает явный public destination
-            // даже после выдачи разрешения. Повторяем HTTP-загрузку сами и пишем
-            // результат через MediaStore/Downloads вместо открытия ссылки как HTML.
-            if (url.startsWith("http://", ignoreCase = true) ||
-                url.startsWith("https://", ignoreCase = true)
-            ) {
-                downloadHttpFallback(url, userAgent, fileName, mimeType)
-            } else {
-                toast(getString(R.string.toast_download_failed))
-            }
+        // Пишем сами через MediaStore/Downloads: так файл гарантированно
+        // появляется в обычной папке «Download», а не остаётся невидимым
+        // в системной очереди загрузок.
+        if (!url.startsWith("http://", ignoreCase = true) &&
+            !url.startsWith("https://", ignoreCase = true)
+        ) {
+            toast(getString(R.string.toast_download_failed))
+            return
         }
+        downloadHttpFile(url, userAgent, fileName, mimeType)
     }
 
-    private fun downloadHttpFallback(
+    private fun downloadHttpFile(
         url: String,
         userAgent: String?,
         fallbackName: String,
         fallbackMimeType: String?,
     ) {
+        toast(getString(R.string.toast_download_started))
         Thread {
             var connection: HttpURLConnection? = null
             try {
@@ -1125,7 +1050,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     /**
      * Некоторые страницы успевают вызвать URL.revokeObjectURL сразу после
      * клика. Перехватываем такой клик в capture-фазе и читаем blob до revoke,
-     * не передавая blob:// в DownloadManager.
+     * не передавая blob:// системному HTTP-загрузчику.
      */
     private fun injectBlobDownloadHelper(view: WebView) {
         val script = """
