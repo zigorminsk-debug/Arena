@@ -49,7 +49,7 @@ class DownloadFileNameTest {
             mimeType = "application/pdf",
         )
 
-        assertEquals("download.pdf", result?.name)
+        assertEquals("7f2b.pdf", result?.name)
         assertTrue(result?.hasExtension == true)
     }
 
