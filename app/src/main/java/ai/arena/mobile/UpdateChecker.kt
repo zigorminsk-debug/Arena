@@ -252,7 +252,11 @@ object UpdateChecker {
                 } catch (t: Throwable) {
                     null
                 }
-                if (uri != null) launchInstaller(activity, uri) else openUrl(activity, RELEASES_PAGE)
+                if (uri != null) {
+                    launchInstaller(activity, uri)
+                } else {
+                    toast(activity, R.string.update_download_failed)
+                }
             }
 
             DownloadManager.STATUS_FAILED -> {
@@ -272,7 +276,9 @@ object UpdateChecker {
         try {
             activity.startActivity(intent)
         } catch (t: Throwable) {
-            openUrl(activity, RELEASES_PAGE)
+            // Не подменяем APK HTML-страницей релиза. Кнопка «Открыть на
+            // GitHub» в диалоге остаётся отдельным явным действием.
+            toast(activity, R.string.update_download_failed)
         }
     }
 
