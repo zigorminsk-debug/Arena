@@ -2,11 +2,13 @@ package ai.arena.mobile
 
 import android.annotation.SuppressLint
 import android.app.DownloadManager
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -77,6 +79,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var sessionWarningChecked = false
     private var pendingDownload: PendingDownload? = null
     private var pendingBlobDownload: BlobDownload? = null
+    private var downloadReceiverRegistered = false
+    private val regularDownloadIds = mutableSetOf<Long>()
 
     private data class PendingDownload(
         val url: String,
@@ -128,6 +132,31 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             }
         }
 
+    private val downloadCompleteReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (id <= 0L || !regularDownloadIds.remove(id)) return
+
+            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            var status = DownloadManager.STATUS_FAILED
+            try {
+                manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val index = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        if (index >= 0) status = cursor.getInt(index)
+                    }
+                }
+            } catch (_: Throwable) {
+                // Treat an unreadable result as a failed download.
+            }
+            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                toast(getString(R.string.toast_download_saved))
+            } else {
+                toast(getString(R.string.toast_download_failed))
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- lifecycle
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -135,6 +164,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         // разводит данные профилей по разным каталогам WebView.
         prepareProcessDataDirectory()
         super.onCreate(savedInstanceState)
+        registerDownloadReceiver()
         restoreBundle = savedInstanceState?.getBundle(STATE_WEBVIEW)
         restoredUrl = savedInstanceState?.getString(STATE_URL)
         pendingSharedText = savedInstanceState?.getString(ProfileRouter.EXTRA_SHARED_TEXT)
@@ -145,6 +175,32 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
         appLockGate = AppLockGate(this)
         appLockGate.ensure { startProfileContent(intent) }
+    }
+
+    private fun registerDownloadReceiver() {
+        if (downloadReceiverRegistered) return
+        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(downloadCompleteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("DEPRECATION")
+                registerReceiver(downloadCompleteReceiver, filter)
+            }
+            downloadReceiverRegistered = true
+        } catch (_: Throwable) {
+            // DownloadManager's own notification remains available as a fallback.
+        }
+    }
+
+    private fun unregisterDownloadReceiver() {
+        if (!downloadReceiverRegistered) return
+        try {
+            unregisterReceiver(downloadCompleteReceiver)
+        } catch (_: Throwable) {
+            // ignore
+        }
+        downloadReceiverRegistered = false
     }
 
     private fun prepareProcessDataDirectory() {
@@ -275,6 +331,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
 
     override fun onDestroy() {
         persistSessionBeforeLeaving()
+        unregisterDownloadReceiver()
         try {
             binding.webView.removeJavascriptInterface(WebBridge.JS_NAME)
             (binding.webView.parent as? ViewGroup)?.removeView(binding.webView)
@@ -866,7 +923,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 val fileName = DownloadFileName.resolveSuggestedName(download.suggestedName, mime)?.name
                     ?: "download"
                 saveBlobToDownloads(fileName, mime, bytes)
-                runOnUiThread { toast(getString(R.string.toast_download_started)) }
+                runOnUiThread { toast(getString(R.string.toast_download_saved)) }
             } catch (_: Throwable) {
                 runOnUiThread { toast(getString(R.string.toast_download_failed)) }
             }
@@ -998,7 +1055,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             request.allowScanningByMediaScanner()
             request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            manager.enqueue(request)
+            val id = manager.enqueue(request)
+            regularDownloadIds.add(id)
             toast(getString(R.string.toast_download_started))
         } catch (t: Throwable) {
             // На части прошивок DownloadManager запрещает явный public destination
@@ -1049,7 +1107,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
                 )?.name ?: fallbackName
                 val mime = responseMime ?: fallbackMimeType ?: "application/octet-stream"
                 connection.inputStream.use { input -> saveStreamToDownloads(name, mime, input) }
-                runOnUiThread { toast(getString(R.string.toast_download_started)) }
+                runOnUiThread { toast(getString(R.string.toast_download_saved)) }
             } catch (_: Throwable) {
                 runOnUiThread { toast(getString(R.string.toast_download_failed)) }
             } finally {

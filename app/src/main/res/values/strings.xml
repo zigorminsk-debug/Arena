@@ -173,6 +173,7 @@
     <string name="toast_reset_done">Profile data wiped</string>
     <string name="toast_url_copied">Link copied</string>
     <string name="toast_download_started">Download started</string>
+    <string name="toast_download_saved">File saved in Downloads</string>
     <string name="toast_download_failed">Could not download the file</string>
     <string name="toast_no_app">No app can handle this link</string>
     <string name="error_title">Could not load the page</string>

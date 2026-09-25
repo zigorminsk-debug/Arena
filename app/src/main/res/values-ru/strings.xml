@@ -173,6 +173,7 @@
     <string name="toast_reset_done">Данные профиля удалены</string>
     <string name="toast_url_copied">Ссылка скопирована</string>
     <string name="toast_download_started">Загрузка началась</string>
+    <string name="toast_download_saved">Файл сохранён в папке Downloads</string>
     <string name="toast_download_failed">Не удалось скачать файл</string>
     <string name="toast_no_app">Нет приложения для этой ссылки</string>
     <string name="error_title">Не удалось загрузить страницу</string>
