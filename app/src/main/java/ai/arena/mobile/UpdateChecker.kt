@@ -202,14 +202,23 @@ object UpdateChecker {
                 setDescription(activity.getString(R.string.app_name))
                 setMimeType(APK_MIME)
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, release.assetName)
+                // Приложение не должно требовать WRITE_EXTERNAL_STORAGE только
+                // ради обновления. DownloadManager выдаёт content:// URI, из
+                // которого системный установщик прочитает APK.
+                setDestinationInExternalFilesDir(
+                    activity,
+                    Environment.DIRECTORY_DOWNLOADS,
+                    release.assetName,
+                )
             }
             val id = manager.enqueue(request)
             prefs(activity).edit().putLong(KEY_DOWNLOAD_ID, id).apply()
             toast(activity, R.string.update_download_started)
         } catch (t: Throwable) {
+            // Не открываем HTML-страницу как запасной файл: на устройствах
+            // без браузера это превращается в «нет приложения для ссылки».
+            // Пользователь может отдельно выбрать «Открыть на GitHub».
             toast(activity, R.string.update_download_failed)
-            openUrl(activity, release.pageUrl)
         }
     }
 

@@ -69,6 +69,14 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     private var pendingPermissionRequest: PermissionRequest? = null
     private var contentStarted = false
     private var sessionWarningChecked = false
+    private var pendingDownload: PendingDownload? = null
+
+    private data class PendingDownload(
+        val url: String,
+        val userAgent: String?,
+        val contentDisposition: String?,
+        val mimeType: String?,
+    )
 
     private val fileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -84,6 +92,23 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             pendingPermissionRequest = null
             if (request == null) return@registerForActivityResult
             if (grants.isNotEmpty() && grants.values.all { it }) request.grant(request.resources) else request.deny()
+        }
+
+    private val storagePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val pending = pendingDownload
+            pendingDownload = null
+            if (pending == null) return@registerForActivityResult
+            if (granted) {
+                startDownload(
+                    pending.url,
+                    pending.userAgent,
+                    pending.contentDisposition,
+                    pending.mimeType,
+                )
+            } else {
+                toast(getString(R.string.toast_download_failed))
+            }
         }
 
     // ---------------------------------------------------------------- lifecycle
@@ -680,7 +705,8 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             !hasPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         ) {
-            openExternally(Uri.parse(url))
+            pendingDownload = PendingDownload(url, userAgent, contentDisposition, mimeType)
+            storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             return
         }
 
@@ -786,8 +812,10 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             manager.enqueue(request)
             toast(getString(R.string.toast_download_started))
         } catch (t: Throwable) {
+            // Не передаём blob:// или ошибочную ссылку внешнему приложению:
+            // Android пытается открыть её как HTML и показывает вторую,
+            // вводящую в заблуждение ошибку «нет приложения для ссылки».
             toast(getString(R.string.toast_download_failed))
-            openExternally(Uri.parse(url))
         }
     }
 
