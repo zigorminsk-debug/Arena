@@ -51,6 +51,7 @@ import kotlin.math.abs
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -873,6 +874,12 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
     }
 
     private fun saveBlobToDownloads(fileName: String, mimeType: String, bytes: ByteArray) {
+        bytes.inputStream().use { input ->
+            saveStreamToDownloads(fileName, mimeType, input)
+        }
+    }
+
+    private fun saveStreamToDownloads(fileName: String, mimeType: String, input: InputStream) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
@@ -883,7 +890,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 ?: throw IllegalStateException("cannot create Downloads entry")
             try {
-                contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output) }
                     ?: throw IllegalStateException("cannot open Downloads entry")
                 val completed = ContentValues().apply {
                     put(MediaStore.Downloads.IS_PENDING, 0)
@@ -902,7 +909,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             throw IllegalStateException("cannot create Downloads directory")
         }
         val target = nextDownloadFile(directory, fileName)
-        FileOutputStream(target).use { it.write(bytes) }
+        FileOutputStream(target).use { output -> input.copyTo(output) }
     }
 
     private fun nextDownloadFile(directory: File, fileName: String): File {
@@ -994,11 +1001,65 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
             manager.enqueue(request)
             toast(getString(R.string.toast_download_started))
         } catch (t: Throwable) {
-            // Не передаём blob:// или ошибочную ссылку внешнему приложению:
-            // Android пытается открыть её как HTML и показывает вторую,
-            // вводящую в заблуждение ошибку «нет приложения для ссылки».
-            toast(getString(R.string.toast_download_failed))
+            // На части прошивок DownloadManager запрещает явный public destination
+            // даже после выдачи разрешения. Повторяем HTTP-загрузку сами и пишем
+            // результат через MediaStore/Downloads вместо открытия ссылки как HTML.
+            if (url.startsWith("http://", ignoreCase = true) ||
+                url.startsWith("https://", ignoreCase = true)
+            ) {
+                downloadHttpFallback(url, userAgent, fileName, mimeType)
+            } else {
+                toast(getString(R.string.toast_download_failed))
+            }
         }
+    }
+
+    private fun downloadHttpFallback(
+        url: String,
+        userAgent: String?,
+        fallbackName: String,
+        fallbackMimeType: String?,
+    ) {
+        Thread {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
+                    connectTimeout = DOWNLOAD_FALLBACK_TIMEOUT_MS
+                    readTimeout = DOWNLOAD_FALLBACK_TIMEOUT_MS
+                    useCaches = false
+                    setRequestProperty("Accept", "*/*")
+                    if (!userAgent.isNullOrBlank()) setRequestProperty("User-Agent", userAgent)
+                    CookieManager.getInstance().getCookie(url)?.let {
+                        setRequestProperty("Cookie", it)
+                    }
+                }
+                if (connection.responseCode !in 200..299) {
+                    throw IllegalStateException("download HTTP ${connection.responseCode}")
+                }
+
+                val responseMime = connection.getHeaderField("Content-Type")
+                    ?.substringBefore(';')
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                val name = DownloadFileName.resolve(
+                    connection.url?.toString() ?: url,
+                    connection.getHeaderField("Content-Disposition"),
+                    responseMime ?: fallbackMimeType,
+                )?.name ?: fallbackName
+                val mime = responseMime ?: fallbackMimeType ?: "application/octet-stream"
+                connection.inputStream.use { input -> saveStreamToDownloads(name, mime, input) }
+                runOnUiThread { toast(getString(R.string.toast_download_started)) }
+            } catch (_: Throwable) {
+                runOnUiThread { toast(getString(R.string.toast_download_failed)) }
+            } finally {
+                try {
+                    connection?.disconnect()
+                } catch (_: Throwable) {
+                    // ignore
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     // --------------------------------------------------------------- GitHub
@@ -1384,6 +1445,7 @@ abstract class BaseProfileActivity : AppCompatActivity(), WebBridge.Host {
         private const val STATE_URL = "profile_webview_url"
         private const val SESSION_CHECK_DELAY_MS = 350L
         private const val DOWNLOAD_PROBE_TIMEOUT_MS = 5_000
+        private const val DOWNLOAD_FALLBACK_TIMEOUT_MS = 60_000
         private const val MAX_BLOB_DATA_URL_LENGTH = 128 * 1024 * 1024
     }
 }
